@@ -6,7 +6,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 intents = discord.Intents.default()
-intents.message_content = True
+
+# INTENTS OBLIGATOIRES POUR LES LOGS
+intents.members = True          # OBLIGATOIRE pour Arrivée/Départ + Rôles
+intents.voice_states = True     # OBLIGATOIRE pour Vocal (Déplacement/Stream)
+intents.message_content = True  # OBLIGATOIRE pour Messages (déjà là)
 
 bot = commands.Bot(command_prefix="+", intents=intents)
 
@@ -37,6 +41,10 @@ async def main():
             # On charge la Modération (NOUVEAU)
             await bot.load_extension("cogs.moderation")
             print("Extension 'cogs.moderation' chargée.")
+
+            # On charge les Logs
+            await bot.load_extension("cogs.logs")
+            print("Extension 'cogs.logs' chargée.")
 
         except Exception as e:
             print(f"Erreur lors du chargement des cogs : {e}")

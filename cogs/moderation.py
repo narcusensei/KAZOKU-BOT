@@ -338,6 +338,12 @@ class Moderation(commands.Cog):
         dur_str = f"{hours}h {minutes}m {seconds}s"
         self.add_sanction(utilisateur.id, "Mute", reason or "Aucune", interaction.user.name, dur_str)
 
+        # <--- AJOUTER CECI ---
+        logs_cog = self.bot.get_cog('Logs')
+        if logs_cog:
+            await logs_cog.send_log(interaction, "Mute", utilisateur, interaction.user, reason or "Aucune", dur_str, mute_end)
+        # -----------------------
+
         embed = discord.Embed(
             title="[MUTE]",
             description=f"L'utilisateur **{utilisateur.name}** ({utilisateur.id}) a été mute pour {dur_str}.",
@@ -390,6 +396,12 @@ class Moderation(commands.Cog):
         # Enregistrement
         self.add_sanction(utilisateur.id, "Unmute", "Fin du timeout", interaction.user.name)
 
+        # <--- AJOUTER CECI ---
+        logs_cog = self.bot.get_cog('Logs')
+        if logs_cog:
+            await logs_cog.send_log(interaction, "Unmute", utilisateur, interaction.user, "Fin du timeout")
+        # -----------------------
+
         # Embed Unifié
         embed = discord.Embed(
             title="[UNMUTE]",
@@ -413,6 +425,13 @@ class Moderation(commands.Cog):
         await interaction.response.defer(ephemeral=True) # <--- Privé
 
         self.add_sanction(utilisateur.id, "Kick", reason or "Aucune", interaction.user.name)
+
+
+        # <--- AJOUTER CECI ---
+        logs_cog = self.bot.get_cog('Logs')
+        if logs_cog:
+            await logs_cog.send_log(interaction, "Kick", utilisateur, interaction.user, reason)
+        # -----------------------
 
         # --- ENVOI DU MP (RESTAURÉ) ---
         embed_dm = discord.Embed(
@@ -476,6 +495,12 @@ class Moderation(commands.Cog):
         # Enregistrement
         self.add_sanction(utilisateur.id, "Ban", reason or "Aucune", interaction.user.name)
 
+        # <--- AJOUTER CECI ---
+        logs_cog = self.bot.get_cog('Logs')
+        if logs_cog:
+            await logs_cog.send_log(interaction, "Ban", utilisateur, interaction.user, reason)
+        # -----------------------
+
         # Exécution
         try:
             await interaction.guild.ban(discord.Object(id=utilisateur.id), reason=reason)
@@ -529,6 +554,12 @@ class Moderation(commands.Cog):
             await interaction.followup.send(f"Erreur lors du deban : {e}", ephemeral=True)
             return
 
+        # <--- AJOUTER CECI ---
+        logs_cog = self.bot.get_cog('Logs')
+        if logs_cog:
+            await logs_cog.send_log(interaction, "Unban", user_to_unban, interaction.user, reason)
+        # -----------------------
+
         # Confirmation
         embed = discord.Embed(
             title="✅ DÉBANNISSEMENT",
@@ -557,6 +588,12 @@ class Moderation(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         count = self.add_sanction(utilisateur.id, "Avertissement", reason, interaction.user.name)
+
+        # <--- AJOUTER CECI ---
+        logs_cog = self.bot.get_cog('Logs')
+        if logs_cog:
+            await logs_cog.send_log(interaction, "Avertissement", utilisateur, interaction.user, reason)
+        # -----------------------
 
         # Envoi du MP (discord.User a une methode .send)
         embed_dm = discord.Embed(title="⚠️ AVERTISSEMENT", description=f"Tu as reçu un avertissement sur **{interaction.guild.name}**.", color=discord.Color.gold())
