@@ -68,8 +68,12 @@ class Logs(commands.Cog):
 
         # --- INFOS SPÉCIFIQUES (Mute) ---
         if action_type == "Mute" and end_time:
-            # Calcul du temps restant si possible, ou affichage brut
-            embed.add_field(name="Fin du Mute", value=f"🔔 {end_time.strftime('%d/%m/%Y %H:%M')} UTC", inline=False)
+            # Format relatif : <t:timestamp:R> affiche "dans X temps"
+            ts_end = int(end_time.timestamp())
+            relative_time = f"<t:{ts_end}:R>"
+            absolute_time = end_time.strftime('%d/%m/%Y %H:%M')
+
+            embed.add_field(name="Fin du Mute", value=f"Dans **{relative_time}**\n🔔 {absolute_time} UTC", inline=False)
 
         if duration_str:
             # On ajoute la durée (ex: 30s) dans la raison ou un champ à part si on veut suivre exactement la demande

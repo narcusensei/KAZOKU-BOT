@@ -520,23 +520,24 @@ class Moderation(commands.Cog):
 
         await interaction.followup.send(embed=embed)
 
-    # --- COMMANDE UNBAN (CORRIGÉE TYPE) ---
+    # --- COMMANDE UNBAN (Corrigée) ---
     @app_commands.command(name="unban", description="Débannir un utilisateur par ID")
-    @app_commands.describe(target_id="L'ID de la personne à débannir")
-    async def unban_slash(self, interaction: discord.Interaction, target_id: str):
+    @app_commands.describe(target_id="L'ID de la personne à débannir", reason="La raison du deban")
+    async def unban_slash(self, interaction: discord.Interaction, target_id: str, reason: str = None):
 
         # Vérification permission
         if not await self.check_perm(interaction, "unban"):
             await interaction.response.send_message("Tu n'as pas la permission de débannir.", ephemeral=True)
             return
 
-        # --- CONVERSION EN ENTIER ---
+        # Conversion ID
         try:
             user_id = int(target_id)
         except ValueError:
             await interaction.response.send_message("L'ID doit être composé uniquement de chiffres.", ephemeral=True)
             return
 
+        # On lance la réflexion IMMÉDIATEMENT pour éviter le timeout
         await interaction.response.defer(ephemeral=True)
 
         # On essaie de récupérer les infos du bannissement
@@ -547,26 +548,31 @@ class Moderation(commands.Cog):
             await interaction.followup.send("Cet utilisateur n'est pas banni (ou l'ID est invalide).", ephemeral=True)
             return
 
-        # Exécution du unban
+        # Exécution du unban (avec gestion d'erreur)
         try:
-            await interaction.guild.unban(user_to_unban)
+            await interaction.guild.unban(user_to_unban, reason=reason)
         except Exception as e:
-            await interaction.followup.send(f"Erreur lors du deban : {e}", ephemeral=True)
+            print(f"Erreur lors du deban : {e}")
+            await interaction.followup.send("Une erreur est survenue lors du débannissement.", ephemeral=True)
             return
 
-        # <--- AJOUTER CECI ---
+        # Enregistrement
+        self.add_sanction(user_to_unban.id, "Unban", reason or "Aucune", interaction.user.name)
+
+        # --- ENVOI DU LOG (CORRIGÉ ICI) ---
         logs_cog = self.bot.get_cog('Logs')
         if logs_cog:
             await logs_cog.send_log(interaction, "Unban", user_to_unban, interaction.user, reason)
-        # -----------------------
+        # -----------------------------------
 
-        # Confirmation
+        # Embed de confirmation
         embed = discord.Embed(
             title="✅ DÉBANNISSEMENT",
             description=f"L'utilisateur **{user_to_unban.name}** ({user_to_unban.id}) a été débanni du serveur.",
             color=discord.Color.green()
         )
 
+        if reason: embed.add_field(name="Raison", value=reason)
         embed.set_footer(text=f"Par {interaction.user.name}", icon_url=interaction.user.display_avatar.url)
 
         await interaction.followup.send(embed=embed)
