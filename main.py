@@ -11,6 +11,9 @@ intents = discord.Intents.default()
 intents.members = True          # OBLIGATOIRE pour Arrivée/Départ + Rôles
 intents.voice_states = True     # OBLIGATOIRE pour Vocal (Déplacement/Stream)
 intents.message_content = True  # OBLIGATOIRE pour Messages (déjà là)
+intents.presences = True      # <--- Souvent utile
+intents.invites = True        # <--- Pour la source de l'invite
+intents.moderation = True
 
 bot = commands.Bot(command_prefix="+", intents=intents)
 
