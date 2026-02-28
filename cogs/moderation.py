@@ -412,7 +412,7 @@ class Moderation(commands.Cog):
 
         await interaction.followup.send(embed=embed)
 
-    # --- COMMANDE KICK (Design Unifié + Privé) ---
+    # --- COMMANDE KICK (SANS MP) ---
     @app_commands.command(name="kick", description="Kick un membre")
     @app_commands.describe(utilisateur="Membre à kick", reason="Raison du kick")
     async def kick_slash(self, interaction: discord.Interaction, utilisateur: discord.Member, reason: str = None):
@@ -422,33 +422,20 @@ class Moderation(commands.Cog):
             await interaction.response.send_message(error_msg, ephemeral=True)
             return
 
-        await interaction.response.defer(ephemeral=True) # <--- Privé
+        await interaction.response.defer(ephemeral=True)
 
+        # Enregistrement
         self.add_sanction(utilisateur.id, "Kick", reason or "Aucune", interaction.user.name)
 
+        # --- AUCUN ENVOI DE MP ---
 
-        # <--- AJOUTER CECI ---
-        logs_cog = self.bot.get_cog('Logs')
-        if logs_cog:
-            await logs_cog.send_log(interaction, "Kick", utilisateur, interaction.user, reason)
-        # -----------------------
-
-        # --- ENVOI DU MP (RESTAURÉ) ---
-        embed_dm = discord.Embed(
-            title="👞 KICK",
-            description=f"Tu as été kick de **{interaction.guild.name}**.",
-            color=discord.Color.red()
-        )
-        if reason: embed_dm.add_field(name="Raison", value=reason)
-        await self.send_dm(utilisateur, "Tu as été kick !", embed_dm)
-        # ---------------------------
-
+        # Exécution du kick
         await utilisateur.kick(reason=reason)
 
-        # Embed Unifié
+        # Embed de confirmation
         embed = discord.Embed(
             title="[KICK]",
-            description=f"L'utilisateur **{utilisateur.name}** ({utilisateur.id}) a été kické du serveur.",
+            description=f"L'utilisateur **{utilisateur.name}** ({utilisateur.id}) a été kické.",
             color=discord.Color.red()
         )
         if reason: embed.add_field(name="Raison", value=reason)
