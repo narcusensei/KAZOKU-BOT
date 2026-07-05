@@ -1,61 +1,99 @@
 import os
+import asyncio
+from typing import List
+from dotenv import load_dotenv
 import discord
 from discord.ext import commands
-from dotenv import load_dotenv
+from settings import BOT_PREFIX, BOT_ACTIVITY_TYPE, BOT_ACTIVITY_NAME, TOKEN_ENV_VAR
+
+# --- CONSTANTES LOCALES ---
+DEFAULT_TOKEN_ERROR = "❌ Token manquant dans le fichier .env"
+
+# Liste des cogs à charger
+COGS_EXTENSIONS: List[str] = [
+    "cogs.base",
+    "cogs.moderation",
+    "cogs.logs"
+]
+
+# --- CONFIGURATION ---
 
 load_dotenv()
 
-intents = discord.Intents.default()
 
-# INTENTS OBLIGATOIRES POUR LES LOGS
-intents.members = True          # OBLIGATOIRE pour Arrivée/Départ + Rôles
-intents.voice_states = True     # OBLIGATOIRE pour Vocal (Déplacement/Stream)
-intents.message_content = True  # OBLIGATOIRE pour Messages (déjà là)
-intents.presences = True      # <--- Souvent utile
-intents.invites = True        # <--- Pour la source de l'invite
-intents.moderation = True
+def configure_intents() -> discord.Intents:
+    """Configure les intents nécessaires pour le bot."""
+    intents = discord.Intents.default()
+    intents.members = True
+    intents.message_content = True
+    intents.voice_states = True
+    intents.presences = True
+    intents.guilds = True
+    intents.messages = True
+    intents.reactions = True
+    intents.moderation = True
+    return intents
 
-bot = commands.Bot(command_prefix="+", intents=intents)
 
-@bot.event
-async def on_ready():
-    print(f'Connecté en tant que {bot.user.name}')
-    print(f'Prefixe : +')
-    print('------')
+def create_bot() -> commands.Bot:
+    """Crée et configure l'instance du bot."""
+    intents = configure_intents()
+    bot = commands.Bot(command_prefix=BOT_PREFIX, intents=intents)
 
-    # Ton statut
+    # Attacher l'événement on_ready
+    @bot.event
+    async def on_ready():
+        print(f'✅ Connecté en tant que {bot.user.name}')
+        print(f'📌 Préfixe : {BOT_PREFIX}')
+        print('----------------------')
+        await setup_bot_activity(bot)
+
+    return bot
+
+
+async def setup_bot_activity(bot: commands.Bot) -> None:
+    """Configure l'activité du bot."""
     await bot.change_presence(
         activity=discord.Activity(
-            type=discord.ActivityType.listening,
-            name="narcus 👑"
+            type=BOT_ACTIVITY_TYPE,
+            name=BOT_ACTIVITY_NAME
         )
     )
 
-async def main():
-        token = os.getenv('DISCORD_TOKEN')
-        if not token:
-            raise ValueError("Token manquant")
 
+async def load_cogs(bot: commands.Bot) -> None:
+    """Charge tous les cogs listés."""
+    for cog in COGS_EXTENSIONS:
         try:
-            # On charge la Base
-            await bot.load_extension("cogs.base")
-            print("Extension 'cogs.base' chargée.")
-
-            # On charge la Modération (NOUVEAU)
-            await bot.load_extension("cogs.moderation")
-            print("Extension 'cogs.moderation' chargée.")
-
-            # On charge les Logs
-            await bot.load_extension("cogs.logs")
-            print("Extension 'cogs.logs' chargée.")
-
+            await bot.load_extension(cog)
+            print(f"📦 Extension '{cog}' chargée.")
+        except commands.ExtensionNotFound:
+            print(f"❌ Extension '{cog}' introuvable.")
+        except commands.ExtensionAlreadyLoaded:
+            print(f"⚠️ Extension '{cog}' déjà chargée.")
+        except commands.NoEntryPointError:
+            print(f"❌ Extension '{cog}' : pas de fonction setup.")
         except Exception as e:
-            print(f"Erreur lors du chargement des cogs : {e}")
+            print(f"❌ Erreur lors du chargement de '{cog}' : {e}")
 
-        async with bot:
-            await bot.start(token)
+
+async def main() -> None:
+    """Fonction principale de démarrage du bot."""
+    token = os.getenv(TOKEN_ENV_VAR)
+    if not token:
+        raise ValueError(DEFAULT_TOKEN_ERROR)
+
+    bot = create_bot()
+    await load_cogs(bot)
+
+    async with bot:
+        await bot.start(token)
+
 
 if __name__ == "__main__":
-    # On lance la boucle événementielle avec asyncio
-    import asyncio
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n👋 Arrêt du bot...")
+    except Exception as e:
+        print(f"❌ Erreur critique : {e}")
