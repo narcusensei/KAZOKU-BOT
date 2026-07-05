@@ -1,0 +1,5 @@
+# Dépendances du K4ZK-BOT
+# Installation : pip install -r requirements.txt
+
+discord.py==2.7.1
+python-dotenv==1.2.1
