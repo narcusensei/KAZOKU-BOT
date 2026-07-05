@@ -1,2 +1,28 @@
-# Environnement
+# --- Environnement ---
 .env
+venv/
+.venv/
+env/
+
+# --- Cache Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# --- Backups ---
+backup_*/
+*_backup/
+*.bak
+
+# --- Config locale IDE ---
+.claude/
+.vscode/
+.idea/
+
+# --- Assets / dossiers locaux non nécessaires au repo ---
+img/
+
+# --- OS / divers ---
+.DS_Store
+Thumbs.db
