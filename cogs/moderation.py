@@ -1,38 +1,65 @@
 import discord
+import asyncio
 from discord.ext import commands
 from discord import app_commands
 import json
 import os
+import sys
 from datetime import datetime, timedelta, timezone
+from typing import Optional, Tuple, List, Dict, Any
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from settings import (
+    PERMISSIONS, SANCTION_EMOJIS, SANCTION_COLORS, SANCTION_TYPES,
+    MAX_CLEAR_AMOUNT, MIN_CLEAR_AMOUNT, MAX_SANCTIONS_DISPLAY, MAX_SANCTIONS_SELECT,
+    WARNINGS_FILE, DATA_DIR, UNICODE_EMOJIS, TEXTS, SANCTIONLIST_COLOR, truncate_text
+)
 
-# --- CONFIGURATION DES PERMISSIONS SPÉCIFIQUES ---
-# À gauche : le nom interne de la commande
-# À droite : la liste des rôles autorisés
-PERMISSIONS = {
-    "kick": ["+", "~", "-"],
-    "ban": ["+", "~"],
-    "mute": ["+", "~", "-"],
-    "avert": ["+", "~", "-"],
-    "clear": ["+", "~", "-"],
-    "sanctionliste": ["+", "~", "-"],
-    "unban": ["+"],
-    "unmute": ["+", "~"]
-}
-# -------------------------------------------------
+# --- FONCTIONS UTILITAIRES ---
 
-# --- VUES POUR LE SYSTÈME DE MENU ---
+def ensure_data_directory():
+    """S'assure que le répertoire data existe."""
+    os.makedirs(DATA_DIR, exist_ok=True)
 
-# 1. Vue pour le choix spécifique (Le menu déroulant)
+
+def format_duration(hours: int = 0, minutes: int = 0, seconds: int = 0) -> str:
+    """Formate une durée en texte lisible."""
+    parts = []
+    if hours > 0:
+        parts.append(f"{hours}h")
+    if minutes > 0:
+        parts.append(f"{minutes}m")
+    if seconds > 0 or not parts:
+        parts.append(f"{seconds}s")
+    return " ".join(parts)
+
+
+def get_current_timestamp() -> str:
+    """Retourne le timestamp UTC actuel formaté."""
+    return datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M")
+
+
+# Verrou global protégeant warnings.json contre les accès concurrents (read-modify-write).
+# Partagé entre le cog Moderation et les vues UI (SpecificSanctionView / MainSanctionView).
+_warnings_lock = asyncio.Lock()
+
+
+async def add_sanction_data_async(user_id: int, sanction_type: str, reason: str, moderator: str, duration: str = "") -> int:
+    """Version asynchrone et thread-safe d'add_sanction_data (utilise le verrou global)."""
+    async with _warnings_lock:
+        return add_sanction_data(user_id, sanction_type, reason, moderator, duration)
+
+
+# --- VUES ---
+
 class SpecificSanctionView(discord.ui.View):
-    def __init__(self, bot, user_id, member_name, interaction_origin):
-        super().__init__(timeout=None)
-        self.bot = bot
-        self.user_id = str(user_id)
-        self.member_name = member_name
-        self.interaction_origin = interaction_origin # Pour mettre à jour le message principal si besoin
+    """Vue pour sélectionner et supprimer une sanction spécifique."""
+
+    def __init__(self, user_id: str):
+        super().__init__(timeout=60)
+        self.user_id = user_id
 
     @discord.ui.select(
-        placeholder="Sélectionne une sanction à supprimer...",
+        placeholder=TEXTS["select_placeholder"],
         min_values=1,
         max_values=1,
         options=[]
@@ -40,50 +67,46 @@ class SpecificSanctionView(discord.ui.View):
     async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
         selected_idx = int(select.values[0])
 
-        # Chargement des données
-        warnings_file = "data/warnings.json"
-        if os.path.exists(warnings_file):
-            with open(warnings_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-        else:
-            data = {}
+        try:
+            data = load_warnings_data()
+        except (IOError, json.JSONDecodeError):
+            await interaction.response.send_message(TEXTS["data_read_error"], ephemeral=True)
+            return
 
-        uid = str(self.user_id)
-        if uid in data:
-            # On récupère la sanction à supprimer
-            # Note: select.values[0] contient l'index réel
-            removed = data[uid].pop(selected_idx)
+        uid = self.user_id
+        async with _warnings_lock:
+            if uid in data and len(data[uid]) > selected_idx:
+                removed = data[uid].pop(selected_idx)
+                try:
+                    save_warnings_data(data)
+                except (IOError, json.JSONDecodeError):
+                    await interaction.response.send_message(TEXTS["data_save_error"], ephemeral=True)
+                    return
+            else:
+                await interaction.response.send_message(f'{UNICODE_EMOJIS["cross"]} {TEXTS["sanction_not_found"]}', ephemeral=True)
+                return
 
-            # Sauvegarde
-            with open(warnings_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=4, ensure_ascii=False)
+        await interaction.response.send_message(f'{UNICODE_EMOJIS["check"]} {TEXTS["sanction_deleted"].format(type=removed["type"])}', ephemeral=True)
+        self.stop()
 
-            await interaction.response.send_message(f"✅ La sanction **{removed['type']}** a été effacée.", ephemeral=True)
 
-            # Si on voulait rafraîchir le message d'origine, c'est possible mais complexe.
-            # Pour l'instant, on se contente de la confirmation éphémère.
-
-# 2. Vue Principale (Les 2 gros boutons)
 class MainSanctionView(discord.ui.View):
-    def __init__(self, bot, user_id, member_name):
+    """Vue principale de gestion des sanctions."""
+
+    def __init__(self, user_id: str):
         super().__init__(timeout=None)
-        self.bot = bot
-        self.user_id = str(user_id)
-        self.member_name = member_name
+        self.user_id = user_id
 
-    @discord.ui.button(label="🗑️ Supprimer une sanction spécifique", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label=TEXTS["select_delete_specific"], style=discord.ButtonStyle.primary)
     async def specific_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Charger les données
-        warnings_file = "data/warnings.json"
-        data = {}
-        if os.path.exists(warnings_file):
-            with open(warnings_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+        try:
+            data = load_warnings_data()
+        except (IOError, json.JSONDecodeError):
+            await interaction.response.send_message(TEXTS["data_read_error"], ephemeral=True)
+            return
 
-        uid = str(self.user_id)
-
-        # Filtrer : Uniquement Ban, Kick, Mute, Avertissement
-        allowed_types = ["Ban", "Kick", "Mute", "Avertissement"]
+        uid = self.user_id
+        allowed_types = SANCTION_TYPES
 
         valid_sanctions = []
         if uid in data:
@@ -92,15 +115,14 @@ class MainSanctionView(discord.ui.View):
                     valid_sanctions.append((idx, sanction))
 
         if not valid_sanctions:
-            await interaction.response.send_message("Aucune sanction (Ban/Kick/Mute/Avert) à supprimer.", ephemeral=True)
+            await interaction.response.send_message(TEXTS["no_sanctions_to_delete"], ephemeral=True)
             return
 
-        # Créer les options pour le menu
         options = []
-        for real_idx, sanction in valid_sanctions[-24:]: # Limite 24 options
+        for real_idx, sanction in valid_sanctions[-MAX_SANCTIONS_SELECT:]:
             s_type = sanction.get("type")
             date_short = sanction['date'].split(' ')[0]
-            reason_short = (sanction['reason'][:30] + '...') if len(sanction['reason']) > 30 else sanction['reason']
+            reason_short = truncate_text(sanction['reason'], 30)
 
             options.append(discord.SelectOption(
                 label=f"{s_type} ({date_short})",
@@ -108,315 +130,292 @@ class MainSanctionView(discord.ui.View):
                 description=reason_short
             ))
 
-        # Envoyer le nouveau menu
-        view = SpecificSanctionView(self.bot, self.user_id, self.member_name, interaction)
+        view = SpecificSanctionView(self.user_id)
         view.select_callback.options = options
 
-        await interaction.response.send_message("Choisis la sanction à effacer ci-dessous :", view=view, ephemeral=True)
+        await interaction.response.send_message(TEXTS["choose_sanction"], view=view, ephemeral=True)
 
-    @discord.ui.button(label="⚠️ Supprimer TOUTES les sanctions", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label=TEXTS["select_delete_all"], style=discord.ButtonStyle.danger)
     async def delete_all_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Charger et supprimer
-        warnings_file = "data/warnings.json"
-        if os.path.exists(warnings_file):
-            with open(warnings_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-        else:
-            data = {}
+        try:
+            data = load_warnings_data()
+        except (IOError, json.JSONDecodeError):
+            await interaction.response.send_message(TEXTS["data_read_error"], ephemeral=True)
+            return
 
-        uid = str(self.user_id)
-        if uid in data:
+        uid = self.user_id
+        if uid not in data:
+            await interaction.response.send_message(TEXTS["nothing_to_delete"], ephemeral=True)
+            return
+
+        async with _warnings_lock:
             del data[uid]
-            with open(warnings_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=4, ensure_ascii=False)
+            try:
+                save_warnings_data(data)
+            except (IOError, json.JSONDecodeError):
+                await interaction.response.send_message(TEXTS["data_save_error"], ephemeral=True)
+                return
 
-            # On désactive les boutons après action
-            self.stop()
-            await interaction.response.edit_message(content="✅ Toutes les sanctions ont été supprimées.", embed=None, view=None)
-        else:
-            await interaction.response.send_message("Il n'y a rien à supprimer.", ephemeral=True)
+        self.stop()
+        await interaction.response.edit_message(content=f'{UNICODE_EMOJIS["check"]} {TEXTS["all_sanctions_deleted"]}', embed=None, view=None)
+
+
+# --- FONCTIONS DE GESTION DES DONNÉES ---
+
+def load_warnings_data() -> Dict[str, Any]:
+    """Charge les données des avertissements depuis le fichier JSON."""
+    if os.path.exists(WARNINGS_FILE):
+        try:
+            with open(WARNINGS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (IOError, json.JSONDecodeError) as e:
+            print(f"Erreur chargement warnings: {e}")
+            return {}
+    return {}
+
+
+def save_warnings_data(data: Dict[str, Any]) -> None:
+    """Sauvegarde les données des avertissements dans le fichier JSON."""
+    ensure_data_directory()
+    with open(WARNINGS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+
+
+def add_sanction_data(user_id: int, sanction_type: str, reason: str, moderator: str, duration: str = "") -> int:
+    """Ajoute une sanction aux données et retourne le nouveau total."""
+    data = load_warnings_data()
+    uid = str(user_id)
+    if uid not in data:
+        data[uid] = []
+
+    data[uid].append({
+        "type": sanction_type,
+        "reason": reason,
+        "duration": duration,
+        "date": get_current_timestamp(),
+        "moderator": moderator
+    })
+
+    save_warnings_data(data)
+    return len(data[uid])
+
+
+def get_sanctions_by_type(user_id: int) -> List[Dict[str, Any]]:
+    """Retourne les sanctions d'un utilisateur filtrées par type."""
+    data = load_warnings_data()
+    uid = str(user_id)
+    allowed_types = SANCTION_TYPES
+
+    sanctions = []
+    if uid in data:
+        sanctions = [s for s in data[uid] if s.get("type") in allowed_types]
+
+    return sanctions
+
+
+# --- COG MODÉRATION ---
 
 class Moderation(commands.Cog):
+    """Cog de gestion de la modération."""
+
     def __init__(self, bot):
         self.bot = bot
-        self.warnings_file = "data/warnings.json"
 
-    # --- GESTION FICHIERS ---
-    def load_data(self):
-        if os.path.exists(self.warnings_file):
+    # --- VÉRIFICATION DES PERMISSIONS ---
+
+    async def get_member(self, guild: discord.Guild, user_id: int) -> Optional[discord.Member]:
+        """Récupère un membre depuis le cache ou via l'API."""
+        member = guild.get_member(user_id)
+        if not member:
             try:
-                with open(self.warnings_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except:
-                return {}
-        return {}
+                member = await guild.fetch_member(user_id)
+            except (discord.NotFound, discord.HTTPException):
+                pass
+        return member
 
-    def save_data(self, data):
-        with open(self.warnings_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4, ensure_ascii=False)
-
-    def add_sanction(self, user_id, s_type, reason, moderator, duration=""):
-        data = self.load_data()
-        uid = str(user_id)
-        if uid not in data:
-            data[uid] = []
-
-        data[uid].append({
-            "type": s_type,
-            "reason": reason,
-            "duration": duration,
-            "date": datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M"),
-            "moderator": moderator
-        })
-        self.save_data(data)
-        return len(data[uid])
-
-    # --- VÉRIFICATION DES PERMISSIONS SÉPARÉES ---
-    async def check_perm(self, interaction, command_name):
-        """Vérifie si l'utilisateur a le droit d'utiliser la commande"""
+    async def check_permission(self, interaction: discord.Interaction, command_name: str) -> bool:
+        """Vérifie si l'utilisateur a la permission d'exécuter une commande."""
         user = interaction.user
-
-        # Le propriétaire a tout le temps les droits
         if user.id == interaction.guild.owner_id:
             return True
 
-        # On essaie de récupérer le membre depuis le cache
-        author_member = interaction.guild.get_member(user.id)
-
-        # --- FIX CRITIQUE : Si pas dans le cache, on force le téléchargement depuis Discord ---
+        author_member = await self.get_member(interaction.guild, user.id)
         if not author_member:
-            try:
-                author_member = await interaction.guild.fetch_member(user.id)
-            except Exception as e:
-                print(f"Impossible de récupérer le membre pour check_perm : {e}")
-                return False
-        # ------------------------------------------------------------------------------------
+            return False
 
         allowed_roles = PERMISSIONS.get(command_name, [])
         user_roles_names = [role.name for role in author_member.roles]
+        return any(role in allowed_roles for role in user_roles_names)
 
-        if any(role in allowed_roles for role in user_roles_names):
-            return True
-
-        return False
-
-    # --- VÉRIFICATION HIÉRARCHIQUE (COMPATIBLE ID) ---
-    async def check_sanction_possible(self, interaction, target, command_name):
-        """
-        target peut être un discord.Member OU un discord.User.
-        Si c'est un User (hors ligne), on vérifie juste les permissions de base.
-        """
-
-        # --- PRIORITÉ ABSOLUE : LE PROPRIÉTAIRE ---
+    async def check_sanction_possible(self, interaction: discord.Interaction, target: discord.abc.User, command_name: str) -> Tuple[bool, Optional[str]]:
+        """Vérifie si une sanction est possible (permissions + hiérarchie)."""
         if interaction.user.id == interaction.guild.owner_id:
             return True, None
-        # ----------------------------------------
 
-        # 1. Vérifier les permissions de l'auteur (Roles)
-        if not await self.check_perm(interaction, command_name):
-            return False, f"Tu n'as pas le rôle nécessaire pour utiliser la commande /{command_name} !"
+        if not await self.check_permission(interaction, command_name):
+            return False, TEXTS["no_role_for_command"].format(command_name=command_name)
 
-        # 2. Récupération du membre auteur
-        author_member = interaction.guild.get_member(interaction.user.id)
+        author_member = await self.get_member(interaction.guild, interaction.user.id)
         if not author_member:
-            try:
-                author_member = await interaction.guild.fetch_member(interaction.user.id)
-            except Exception as e:
-                print(f"Erreur fetch membre hiérarchie : {e}")
-                return False, "Erreur interne : Impossible de récupérer tes rôles."
+            return False, TEXTS["internal_error"]
 
-        # 3. Récupération du membre cible (si dispo sur le serveur)
-        # On tente d'abord le cache, puis fetch si échec (comme pour /profil)
-        target_member = interaction.guild.get_member(target.id)
-        if not target_member:
-            try:
-                target_member = await interaction.guild.fetch_member(target.id)
-            except:
-                pass # target_member reste None = utilisateur hors serveur
+        target_member = await self.get_member(interaction.guild, target.id)
 
-        # 4. Vérification HIÉRARCHIQUE (Seulement si la cible est dans le serveur)
         if target_member:
-            # Propriétaire ?
             if target.id == interaction.guild.owner_id:
-                return False, "Tu ne peux pas sanctionner le propriétaire du serveur !"
-
-            # Auteur < Cible ?
+                return False, TEXTS["cannot_sanction_owner"]
             if author_member.top_role <= target_member.top_role:
-                return False, f"Tu ne peux pas sanctionner {target.display_name} car son rôle est supérieur ou égal au tien."
-
-            # Bot < Cible ?
+                return False, TEXTS["cannot_sanction_higher"].format(target=target.display_name)
             if interaction.guild.me.top_role <= target_member.top_role:
-                return False, f"Je ne peux pas sanctionner {target.display_name} car mon rôle n'est pas assez élevé."
+                return False, TEXTS["bot_cannot_sanction"].format(target=target.display_name)
 
         return True, None
 
-    async def send_dm(self, member, content, embed):
-        try:
-            await member.send(content=content, embed=embed)
-        except discord.Forbidden:
-            pass
+    def send_logs(self, interaction: discord.Interaction, action_type: str, target: discord.abc.User, moderator: discord.abc.User, reason: str, duration_str: str = None, end_time: datetime = None) -> None:
+        """Envoie les logs au cog Logs si disponible."""
+        logs_cog = self.bot.get_cog('Logs')
+        if logs_cog:
+            asyncio.create_task(logs_cog.send_log(interaction, action_type, target, moderator, reason, duration_str, end_time))
 
-    # --- COMMANDE CLEAR (VERSION PRIVÉE) ---
-    @app_commands.command(name="clear", description="Clear des messages")
-    @app_commands.describe(amount="Nombre de messages (1-100)", utilisateur="Optionnel : Clear seulement les messages de cet utilisateur")
+    # --- COMMANDES ---
+
+    @app_commands.command(name="clear", description="Supprime des messages")
+    @app_commands.describe(amount="Nombre de messages (1-100)", utilisateur="Optionnel")
     async def clear_slash(self, interaction: discord.Interaction, amount: int, utilisateur: discord.Member = None):
-
-        if not await self.check_perm(interaction, "clear"):
-            await interaction.response.send_message("Bruh t'as pas les perms bouffon", ephemeral=True)
+        """Supprime des messages dans le channel."""
+        if not await self.check_permission(interaction, "clear"):
+            await interaction.response.send_message(TEXTS["permission_denied"], ephemeral=True)
             return
 
-        if amount < 1 or amount > 100:
-            await interaction.response.send_message("Le nombre doit être entre 1 et 100.", ephemeral=True)
+        if not MIN_CLEAR_AMOUNT <= amount <= MAX_CLEAR_AMOUNT:
+            await interaction.response.send_message(TEXTS["clear_amount_error"].format(min=MIN_CLEAR_AMOUNT, max=MAX_CLEAR_AMOUNT), ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
 
-        deleted = 0
-
-        if utilisateur:
-            # Cas 1 : Chercher X messages spécifiques d'une personne
-            to_delete = []
-            async for message in interaction.channel.history(limit=100):
-                if message.author == utilisateur:
-                    to_delete.append(message)
-                    if len(to_delete) >= amount:
-                        break
-
-            if to_delete:
-                if len(to_delete) == 1:
-                    await to_delete[0].delete()
-                else:
-                    await interaction.channel.delete_messages(to_delete)
-                deleted = len(to_delete)
-                await interaction.followup.send(f"Suppression de {deleted} messages de {utilisateur.name}.", ephemeral=True)
+        try:
+            if utilisateur:
+                deleted = await self._clear_user_messages(interaction, utilisateur, amount)
             else:
-                await interaction.followup.send(f"Aucun message trouvé pour {utilisateur.name} dans les derniers 100 messages.", ephemeral=True)
+                deleted = await interaction.channel.purge(limit=amount)
+                deleted = len(deleted)
 
-        else:
-            # Cas 2 : Clear classique (CORRECTION ICI)
-            deleted_list = await interaction.channel.purge(limit=amount)
-            deleted = len(deleted_list) # <--- On compte le nombre d'éléments de la liste
-            await interaction.followup.send(f"Suppression de {deleted} messages terminée.", ephemeral=True)
+            await interaction.followup.send(TEXTS["clear_success"].format(n=deleted), ephemeral=True)
+        except (discord.Forbidden, discord.HTTPException):
+            await interaction.followup.send(TEXTS["clear_error"], ephemeral=True)
 
-    # --- COMMANDE MUTE (Compatible ID) ---
-    @app_commands.command(name="mute", description="Mute un membre (ID ou Mention)")
-    @app_commands.describe(utilisateur="Membre (ID ou Mention)", reason="Raison du mute", hours="Heures", minutes="Minutes", seconds="Secondes")
+    async def _clear_user_messages(self, interaction: discord.Interaction, utilisateur: discord.Member, amount: int) -> int:
+        """Supprime les messages d'un utilisateur spécifique."""
+        to_delete = []
+        async for message in interaction.channel.history(limit=100):
+            if message.author == utilisateur:
+                to_delete.append(message)
+                if len(to_delete) >= amount:
+                    break
+
+        if not to_delete:
+            return 0
+
+        try:
+            await interaction.channel.delete_messages(to_delete)
+            return len(to_delete)
+        except discord.HTTPException:
+            # Fallback : suppression individuelle
+            for msg in to_delete:
+                try:
+                    await msg.delete()
+                except discord.HTTPException:
+                    pass
+            return len(to_delete)
+
+    @app_commands.command(name="mute", description="Mute un membre")
+    @app_commands.describe(utilisateur="Membre", reason="Raison", hours="Heures", minutes="Minutes", seconds="Secondes")
     async def mute_slash(self, interaction: discord.Interaction, utilisateur: discord.User, reason: str = None, hours: int = 0, minutes: int = 0, seconds: int = 0):
-
+        """Applique un timeout à un membre."""
         can_proceed, error_msg = await self.check_sanction_possible(interaction, utilisateur, "mute")
         if not can_proceed:
             await interaction.response.send_message(error_msg, ephemeral=True)
             return
 
         if utilisateur == interaction.user:
-            await interaction.response.send_message("Pourquoi tu te mutes toi-même ?", ephemeral=True)
+            await interaction.response.send_message(TEXTS["self_mute"], ephemeral=True)
             return
 
-        # Pour mute, il est IMPÉRATIF d'avoir un objet Member (présent sur le serveur)
-        target_member = interaction.guild.get_member(utilisateur.id)
+        target_member = await self.get_member(interaction.guild, utilisateur.id)
         if not target_member:
-            try:
-                target_member = await interaction.guild.fetch_member(utilisateur.id)
-            except:
-                await interaction.response.send_message("Cet utilisateur n'est pas sur le serveur, impossible de le mute.", ephemeral=True)
-                return
+            await interaction.response.send_message(TEXTS["user_not_on_server"], ephemeral=True)
+            return
 
         duration = timedelta(hours=hours, minutes=minutes, seconds=seconds)
-        if duration.total_seconds() == 0:
-            await interaction.response.send_message("Tu dois définir une durée !", ephemeral=True)
+        if duration.total_seconds() <= 0:
+            await interaction.response.send_message(TEXTS["no_duration"], ephemeral=True)
             return
 
-        mute_end = datetime.now(timezone.utc) + duration
         await interaction.response.defer(ephemeral=True)
 
         try:
+            mute_end = datetime.now(timezone.utc) + duration
             await target_member.edit(timed_out_until=mute_end)
         except discord.Forbidden:
-            await interaction.followup.send("Je n'ai pas la permission 'Modérer les membres'.", ephemeral=True)
+            await interaction.followup.send(TEXTS["missing_permission"], ephemeral=True)
+            return
+        except discord.HTTPException:
+            await interaction.followup.send(TEXTS["mute_error"], ephemeral=True)
             return
 
-        dur_str = f"{hours}h {minutes}m {seconds}s"
-        self.add_sanction(utilisateur.id, "Mute", reason or "Aucune", interaction.user.name, dur_str)
+        dur_str = format_duration(hours, minutes, seconds)
+        await add_sanction_data_async(utilisateur.id, "Mute", reason or TEXTS["none"], interaction.user.name, dur_str)
 
-        # <--- AJOUTER CECI ---
-        logs_cog = self.bot.get_cog('Logs')
-        if logs_cog:
-            await logs_cog.send_log(interaction, "Mute", utilisateur, interaction.user, reason or "Aucune", dur_str, mute_end)
-        # -----------------------
+        self.send_logs(interaction, "Mute", utilisateur, interaction.user, reason or TEXTS["none"], dur_str, mute_end)
 
         embed = discord.Embed(
-            title="[MUTE]",
-            description=f"L'utilisateur **{utilisateur.name}** ({utilisateur.id}) a été mute pour {dur_str}.",
-            color=discord.Color.orange()
+            title=TEXTS["mute_title"],
+            description=f"**{utilisateur.name}** {TEXTS['mute_description'].format(dur=dur_str)}",
+            color=SANCTION_COLORS.get("Mute")
         )
-        if reason: embed.add_field(name="Raison", value=reason)
-        embed.set_footer(text=f"Par {interaction.user.name}", icon_url=interaction.user.display_avatar.url)
-
+        if reason:
+            embed.add_field(name=TEXTS["mute_reason"], value=reason)
+        embed.set_footer(text=TEXTS["sanction_by"].format(name=interaction.user.name))
         await interaction.followup.send(embed=embed)
 
-    # --- COMMANDE UNMUTE (Compatible ID) ---
-    @app_commands.command(name="unmute", description="Unmute un membre (ID ou Mention)")
-    @app_commands.describe(utilisateur="Membre (ID ou Mention)")
+    @app_commands.command(name="unmute", description="Unmute un membre")
+    @app_commands.describe(utilisateur="Membre")
     async def unmute_slash(self, interaction: discord.Interaction, utilisateur: discord.User):
+        """Retire le timeout d'un membre."""
+        if not await self.check_permission(interaction, "unmute"):
+            await interaction.response.send_message(TEXTS["permission_denied"], ephemeral=True)
+            return
 
-        # Vérification permission
-        if not await self.check_perm(interaction, "unmute"):
-            await interaction.response.send_message("Tu n'as pas la permission de unmute.", ephemeral=True)
+        member = await self.get_member(interaction.guild, utilisateur.id)
+        if not member:
+            await interaction.response.send_message(TEXTS["user_not_found"], ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
 
-        # --- Récupération du Membre (Obligatoire pour muter/démuter) ---
-        # On essaie de récupérer le membre depuis le cache
-        member = interaction.guild.get_member(utilisateur.id)
-
-        # Si pas dans le cache, on télécharge depuis Discord
-        if not member:
-            try:
-                member = await interaction.guild.fetch_member(utilisateur.id)
-            except discord.NotFound:
-                await interaction.followup.send("Cet utilisateur n'est pas sur le serveur. Impossible de unmuter quelqu'un qui a quitté le serveur.", ephemeral=True)
-                return
-        # -------------------------------------------------------------
-
-        # Vérification Hiérarchique (Réutilisation de la logique existante)
-        # On vérifie juste si l'utilisateur a le droit de sanctionner ce membre
-        can_proceed, error_msg = await self.check_sanction_possible(interaction, utilisateur, "unmute")
-        if not can_proceed:
-            await interaction.followup.send(error_msg, ephemeral=True)
-            return
-
         try:
-            # On retire le mute en mettant None
             await member.edit(timed_out_until=None)
         except discord.Forbidden:
-            await interaction.followup.send("Je n'ai pas la permission 'Modérer les membres'.", ephemeral=True)
+            await interaction.followup.send(TEXTS["missing_permission"], ephemeral=True)
+            return
+        except discord.HTTPException:
+            await interaction.followup.send(TEXTS["unmute_error"], ephemeral=True)
             return
 
-        # Enregistrement
-        self.add_sanction(utilisateur.id, "Unmute", "Fin du timeout", interaction.user.name)
+        await add_sanction_data_async(utilisateur.id, "Unmute", TEXTS["unmute_reason"], interaction.user.name)
+        self.send_logs(interaction, "Unmute", utilisateur, interaction.user, TEXTS["unmute_reason"])
 
-        # <--- AJOUTER CECI ---
-        logs_cog = self.bot.get_cog('Logs')
-        if logs_cog:
-            await logs_cog.send_log(interaction, "Unmute", utilisateur, interaction.user, "Fin du timeout")
-        # -----------------------
-
-        # Embed Unifié
         embed = discord.Embed(
-            title="[UNMUTE]",
-            description=f"L'utilisateur **{utilisateur.name}** ({utilisateur.id}) a été unmute.",
-            color=discord.Color.green()
+            title=TEXTS["unmute_title"],
+            description=f"**{utilisateur.name}** {TEXTS['unmute_description']}",
+            color=SANCTION_COLORS.get("Unmute")
         )
-        embed.set_footer(text=f"Par {interaction.user.name}", icon_url=interaction.user.display_avatar.url)
-
         await interaction.followup.send(embed=embed)
 
-    # --- COMMANDE KICK (SANS MP) ---
     @app_commands.command(name="kick", description="Kick un membre")
-    @app_commands.describe(utilisateur="Membre à kick", reason="Raison du kick")
+    @app_commands.describe(utilisateur="Membre", reason="Raison")
     async def kick_slash(self, interaction: discord.Interaction, utilisateur: discord.Member, reason: str = None):
-
+        """Expulse un membre du serveur."""
         can_proceed, error_msg = await self.check_sanction_possible(interaction, utilisateur, "kick")
         if not can_proceed:
             await interaction.response.send_message(error_msg, ephemeral=True)
@@ -424,233 +423,165 @@ class Moderation(commands.Cog):
 
         await interaction.response.defer(ephemeral=True)
 
-        # Enregistrement
-        self.add_sanction(utilisateur.id, "Kick", reason or "Aucune", interaction.user.name)
+        try:
+            await utilisateur.kick(reason=reason)
+        except (discord.Forbidden, discord.HTTPException):
+            await interaction.followup.send(TEXTS["kick_error"], ephemeral=True)
+            return
 
-        # --- AUCUN ENVOI DE MP ---
+        # Enregistrer et logger seulement si l'action a réussi
+        await add_sanction_data_async(utilisateur.id, "Kick", reason or TEXTS["none"], interaction.user.name)
+        self.send_logs(interaction, "Kick", utilisateur, interaction.user, reason or TEXTS["none"])
 
-        # Exécution du kick
-        await utilisateur.kick(reason=reason)
-
-        # Embed de confirmation
         embed = discord.Embed(
-            title="[KICK]",
-            description=f"L'utilisateur **{utilisateur.name}** ({utilisateur.id}) a été kické.",
-            color=discord.Color.red()
+            title=TEXTS["kick_title"],
+            description=f"**{utilisateur.name}** {TEXTS['kick_description']}",
+            color=SANCTION_COLORS.get("Kick")
         )
-        if reason: embed.add_field(name="Raison", value=reason)
-        embed.set_footer(text=f"Par {interaction.user.name}", icon_url=interaction.user.display_avatar.url)
-
+        if reason:
+            embed.add_field(name=TEXTS["mute_reason"], value=reason)
         await interaction.followup.send(embed=embed)
 
-    # --- COMMANDE BAN (Design Unifié + Privé) ---
-    @app_commands.command(name="ban", description="Ban un membre")
-    @app_commands.describe(utilisateur="Membre (ID ou Mention)", reason="La raison du ban")
+    @app_commands.command(name="ban", description="Ban un utilisateur")
+    @app_commands.describe(utilisateur="Utilisateur", reason="Raison")
     async def ban_slash(self, interaction: discord.Interaction, utilisateur: discord.User, reason: str = None):
-
-        if not await self.check_perm(interaction, "ban"):
-            await interaction.response.send_message("Tu n'as pas la permission de ban.", ephemeral=True)
+        """Bannit un utilisateur du serveur."""
+        can_proceed, error_msg = await self.check_sanction_possible(interaction, utilisateur, "ban")
+        if not can_proceed:
+            await interaction.response.send_message(error_msg, ephemeral=True)
             return
 
-        # Récupération auteur (Fix Cache)
-        author_member = interaction.guild.get_member(interaction.user.id)
-        if not author_member:
-            try:
-                author_member = await interaction.guild.fetch_member(interaction.user.id)
-            except Exception as e:
-                print(f">>> ERREUR FETCH AUTEUR (Ban) : {e}", flush=True)
-                await interaction.response.send_message("Erreur interne.", ephemeral=True)
-                return
-
-        target_member = interaction.guild.get_member(utilisateur.id)
-
-        if utilisateur.id == interaction.guild.owner_id:
-            await interaction.response.send_message("Tu ne peux pas ban le propriétaire !", ephemeral=True)
-            return
-
-        if target_member:
-            if author_member.top_role <= target_member.top_role:
-                await interaction.response.send_message("Tu ne peux pas ban quelqu'un avec un rôle égal ou supérieur au tien.", ephemeral=True)
-                return
-            if interaction.guild.me.top_role <= target_member.top_role:
-                await interaction.response.send_message("Je ne peux pas ban ce membre (rôle trop haut).", ephemeral=True)
-                return
-
-        # On envoie une réponse éphémère (privée) immédiate
         await interaction.response.defer(ephemeral=True)
 
-        # Enregistrement
-        self.add_sanction(utilisateur.id, "Ban", reason or "Aucune", interaction.user.name)
-
-        # <--- AJOUTER CECI ---
-        logs_cog = self.bot.get_cog('Logs')
-        if logs_cog:
-            await logs_cog.send_log(interaction, "Ban", utilisateur, interaction.user, reason)
-        # -----------------------
-
-        # Exécution
         try:
             await interaction.guild.ban(discord.Object(id=utilisateur.id), reason=reason)
-        except Exception as e:
-            print(f">>> ERREUR BAN : {e}", flush=True)
-            await interaction.followup.send("Une erreur est survenue.", ephemeral=True)
+        except (discord.Forbidden, discord.HTTPException):
+            await interaction.followup.send(TEXTS["ban_error"], ephemeral=True)
             return
 
-        # Embed Unifié
-        embed = discord.Embed(
-            title="[BANNISSEMENT]",
-            description=f"L'utilisateur **{utilisateur.name}** ({utilisateur.id}) a été banni du serveur.",
-            color=discord.Color.dark_red()
-        )
-        if reason: embed.add_field(name="Raison", value=reason)
-        embed.set_footer(text=f"Par {interaction.user.name}", icon_url=interaction.user.display_avatar.url)
+        # Enregistrer et logger seulement si l'action a réussi
+        await add_sanction_data_async(utilisateur.id, "Ban", reason or TEXTS["none"], interaction.user.name)
+        self.send_logs(interaction, "Ban", utilisateur, interaction.user, reason or TEXTS["none"])
 
+        embed = discord.Embed(
+            title=TEXTS["ban_title"],
+            description=f"**{utilisateur.name}** {TEXTS['ban_description']}",
+            color=SANCTION_COLORS.get("Ban")
+        )
+        if reason:
+            embed.add_field(name=TEXTS["mute_reason"], value=reason)
         await interaction.followup.send(embed=embed)
 
-    # --- COMMANDE UNBAN (Corrigée) ---
     @app_commands.command(name="unban", description="Débannir un utilisateur par ID")
-    @app_commands.describe(target_id="L'ID de la personne à débannir", reason="La raison du deban")
+    @app_commands.describe(target_id="ID de l'utilisateur", reason="Raison")
     async def unban_slash(self, interaction: discord.Interaction, target_id: str, reason: str = None):
-
-        # Vérification permission
-        if not await self.check_perm(interaction, "unban"):
-            await interaction.response.send_message("Tu n'as pas la permission de débannir.", ephemeral=True)
+        """Débannit un utilisateur."""
+        if not await self.check_permission(interaction, "unban"):
+            await interaction.response.send_message(TEXTS["permission_denied"], ephemeral=True)
             return
 
-        # Conversion ID
         try:
             user_id = int(target_id)
         except ValueError:
-            await interaction.response.send_message("L'ID doit être composé uniquement de chiffres.", ephemeral=True)
+            await interaction.response.send_message(TEXTS["invalid_id"], ephemeral=True)
             return
 
-        # On lance la réflexion IMMÉDIATEMENT pour éviter le timeout
         await interaction.response.defer(ephemeral=True)
 
-        # On essaie de récupérer les infos du bannissement
         try:
             ban_entry = await interaction.guild.fetch_ban(discord.Object(id=user_id))
             user_to_unban = ban_entry.user
         except discord.NotFound:
-            await interaction.followup.send("Cet utilisateur n'est pas banni (ou l'ID est invalide).", ephemeral=True)
+            await interaction.followup.send(TEXTS["user_not_banned"], ephemeral=True)
+            return
+        except discord.HTTPException:
+            await interaction.followup.send(TEXTS["ban_check_error"], ephemeral=True)
             return
 
-        # Exécution du unban (avec gestion d'erreur)
         try:
             await interaction.guild.unban(user_to_unban, reason=reason)
-        except Exception as e:
-            print(f"Erreur lors du deban : {e}")
-            await interaction.followup.send("Une erreur est survenue lors du débannissement.", ephemeral=True)
+        except (discord.Forbidden, discord.HTTPException):
+            await interaction.followup.send(TEXTS["unban_error"], ephemeral=True)
             return
 
-        # Enregistrement
-        self.add_sanction(user_to_unban.id, "Unban", reason or "Aucune", interaction.user.name)
+        # Enregistrer et logger seulement si l'action a réussi
+        await add_sanction_data_async(user_to_unban.id, "Unban", reason or TEXTS["none"], interaction.user.name)
+        self.send_logs(interaction, "Unban", user_to_unban, interaction.user, reason or TEXTS["none"])
 
-        # --- ENVOI DU LOG (CORRIGÉ ICI) ---
-        logs_cog = self.bot.get_cog('Logs')
-        if logs_cog:
-            await logs_cog.send_log(interaction, "Unban", user_to_unban, interaction.user, reason)
-        # -----------------------------------
-
-        # Embed de confirmation
         embed = discord.Embed(
-            title="✅ DÉBANNISSEMENT",
-            description=f"L'utilisateur **{user_to_unban.name}** ({user_to_unban.id}) a été débanni du serveur.",
-            color=discord.Color.green()
+            title=TEXTS["unban_title"],
+            description=f"**{user_to_unban.name}** {TEXTS['unban_description']}",
+            color=SANCTION_COLORS.get("Unban")
         )
-
-        if reason: embed.add_field(name="Raison", value=reason)
-        embed.set_footer(text=f"Par {interaction.user.name}", icon_url=interaction.user.display_avatar.url)
-
         await interaction.followup.send(embed=embed)
 
-    # --- COMMANDE AVERTISSEMENT (Compatible ID) ---
-    @app_commands.command(name="avert", description="Donne un avertissement à un utilisateur (ID ou Mention)")
-    @app_commands.describe(utilisateur="Utilisateur (ID ou Mention)", reason="Raison de l'avertissement")
+    @app_commands.command(name="avert", description="Avertir un utilisateur")
+    @app_commands.describe(utilisateur="Utilisateur", reason="Raison")
     async def avert_slash(self, interaction: discord.Interaction, utilisateur: discord.User, reason: str):
-
+        """Envoie un avertissement à un utilisateur."""
         can_proceed, error_msg = await self.check_sanction_possible(interaction, utilisateur, "avert")
         if not can_proceed:
             await interaction.response.send_message(error_msg, ephemeral=True)
             return
 
         if utilisateur.bot:
-            await interaction.response.send_message("On peut pas avertir un bot.", ephemeral=True)
+            await interaction.response.send_message(TEXTS["cannot_warn_bot"], ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
 
-        count = self.add_sanction(utilisateur.id, "Avertissement", reason, interaction.user.name)
+        count = await add_sanction_data_async(utilisateur.id, "Avertissement", reason, interaction.user.name)
+        self.send_logs(interaction, "Avertissement", utilisateur, interaction.user, reason)
 
-        # <--- AJOUTER CECI ---
-        logs_cog = self.bot.get_cog('Logs')
-        if logs_cog:
-            await logs_cog.send_log(interaction, "Avertissement", utilisateur, interaction.user, reason)
-        # -----------------------
-
-        # Envoi du MP (discord.User a une methode .send)
-        embed_dm = discord.Embed(title="⚠️ AVERTISSEMENT", description=f"Tu as reçu un avertissement sur **{interaction.guild.name}**.", color=discord.Color.gold())
-        embed_dm.add_field(name="Raison", value=reason)
+        # Envoi DM
         try:
+            embed_dm = discord.Embed(
+                title=TEXTS["avert_dm_title"],
+                description=TEXTS["avert_dm_description"].format(guild=interaction.guild.name),
+                color=SANCTION_COLORS.get("Avertissement")
+            )
+            embed_dm.add_field(name=TEXTS["mute_reason"], value=reason)
             await utilisateur.send(embed=embed_dm)
-        except:
-            pass # MP fermé
+        except (discord.Forbidden, discord.HTTPException):
+            pass  # L'utilisateur a désactivé les DMs
 
         embed = discord.Embed(
-            title="[AVERTISSEMENT]",
-            description=f"L'utilisateur **{utilisateur.name}** ({utilisateur.id}) a été averti. (Total sanctions : {count})",
-            color=discord.Color.gold()
+            title=TEXTS["avert_title"],
+            description=f"**{utilisateur.name}** {TEXTS['avert_description'].format(count=count)}",
+            color=SANCTION_COLORS.get("Avertissement")
         )
-        embed.set_footer(text=f"Par {interaction.user.name}", icon_url=interaction.user.display_avatar.url)
-
+        embed.add_field(name=TEXTS["mute_reason"], value=reason)
         await interaction.followup.send(embed=embed)
 
-    # --- COMMANDE SANCTION LISTE (NOUVELLE INTERFACE) ---
-    @app_commands.command(name="sanctionliste", description="Voir et gérer les sanctions d'un utilisateur")
-    @app_commands.describe(utilisateur="Utilisateur à vérifier")
+    @app_commands.command(name="sanctionliste", description="Voir les sanctions")
+    @app_commands.describe(utilisateur="Utilisateur")
     async def sanctionliste_slash(self, interaction: discord.Interaction, utilisateur: discord.User):
-
-        if not await self.check_perm(interaction, "sanctionliste"):
-            await interaction.response.send_message("Tu n'as pas la permission de voir la liste.", ephemeral=True)
+        """Affiche la liste des sanctions d'un utilisateur."""
+        if not await self.check_permission(interaction, "sanctionliste"):
+            await interaction.response.send_message(TEXTS["permission_denied"], ephemeral=True)
             return
 
-        data = self.load_data()
-        user_id = str(utilisateur.id)
+        sanctions = get_sanctions_by_type(utilisateur.id)
 
-        embed = discord.Embed(title=f"Sanctions de {utilisateur.name}", color=discord.Color.purple())
+        embed = discord.Embed(
+            title=TEXTS["sanctionlist_title"].format(name=utilisateur.name),
+            color=SANCTIONLIST_COLOR
+        )
 
-        # On filtre l'affichage : Pas de Unmute
-        allowed_types = ["Ban", "Kick", "Mute", "Avertissement"]
-
-        display_sanctions = []
-        if user_id in data and data[user_id]:
-            for sanction in data[user_id]:
-                if sanction.get("type") in allowed_types:
-                    display_sanctions.append(sanction)
-
-        if display_sanctions:
-            # On inverse pour voir les plus récents
-            display_sanctions.reverse()
-
-            for sanction in display_sanctions[:10]:
+        if sanctions:
+            sanctions.reverse()
+            for sanction in sanctions[:MAX_SANCTIONS_DISPLAY]:
                 s_type = sanction.get("type")
-                emoji = "📝"
-                if s_type == "Kick": emoji = "👞"
-                if s_type == "Ban": emoji = "⛔"
-                if s_type == "Mute": emoji = "🔇"
-                if s_type == "Avertissement": emoji = "⚠️"
-
-                value = f"**Raison :** {sanction['reason']}\n**Par :** {sanction['moderator']} le {sanction['date']}"
-                if sanction.get("duration"):
-                    value += f"\n**Durée :** {sanction['duration']}"
-
+                emoji = SANCTION_EMOJIS.get(s_type, f"{UNICODE_EMOJIS['package']}")
+                value = f"**{TEXTS['sanctionlist_reason']}** {sanction['reason']}\n**{TEXTS['sanctionlist_by']}** {sanction['moderator']}"
                 embed.add_field(name=f"{emoji} {s_type}", value=value, inline=False)
         else:
-            embed.description = "Cet utilisateur n'a aucune sanction (Ban/Kick/Mute/Avert) enregistrée. 🎉"
+            embed.description = f"{TEXTS['sanctionlist_empty']} {UNICODE_EMOJIS['party']}"
 
-        # Envoi de l'Embed + La Vue Principale (Boutons)
-        view = MainSanctionView(self.bot, utilisateur.id, utilisateur.name)
+        view = MainSanctionView(str(utilisateur.id))
         await interaction.response.send_message(embed=embed, view=view)
 
+
 async def setup(bot):
+    """Setup du cog."""
     await bot.add_cog(Moderation(bot))
