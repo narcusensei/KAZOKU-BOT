@@ -34,30 +34,20 @@ LOG_CHANNELS = {
 
 
 # ===================== COULEURS ==============================
-# Utilisez des codes hex : discord.Color(int("FFFFFF", 16))
-#
-# Exemples :
-#   discord.Color(int("FF0000", 16))  → Rouge
+# Palette : Vert (positif) • Rouge (négatif) • Jaune/Or (neutre) • Violet (spécial)
 #   discord.Color(int("00FF00", 16))  → Vert
-#   discord.Color(int("0000FF", 16))  → Bleu
-#   discord.Color(int("FFA500", 16))  → Orange
-#   discord.Color(int("FFD700", 16))  → Or
-#   discord.Color(int("8B0000", 16))  → Rouge foncé
+#   discord.Color(int("FF0000", 16))  → Rouge
+#   discord.Color(int("FFD700", 16))  → Jaune / Or
 #   discord.Color(int("800080", 16))  → Violet
-#   discord.Color(int("9932CC", 16))  → Violet foncé
-#   discord.Color(int("008080", 16))  → Teal
-#   discord.Color(int("FF00FF", 16))  → Magenta
-#   discord.Color(int("808080", 16))  → Gris
-#   discord.Color(int("DCDCDC", 16))  → Gris clair
 
 # --- Couleurs des sanctions ---
 SANCTION_COLORS = {
-    "Ban":           discord.Color(int("8B0000", 16)),  # Rouge foncé
+    "Ban":           discord.Color(int("FF0000", 16)),  # Rouge
     "Unban":         discord.Color(int("00FF00", 16)),  # Vert
     "Kick":          discord.Color(int("FF0000", 16)),  # Rouge
-    "Mute":          discord.Color(int("FFA500", 16)),  # Orange
+    "Mute":          discord.Color(int("FF0000", 16)),  # Rouge
     "Unmute":        discord.Color(int("00FF00", 16)),  # Vert
-    "Avertissement": discord.Color(int("FFD700", 16))   # Or
+    "Avertissement": discord.Color(int("FFD700", 16))   # Jaune
 }
 
 # --- Couleurs vocales ---
@@ -65,13 +55,13 @@ VOICE_COLORS = {
     "join":         discord.Color(int("00FF00", 16)),  # Vert
     "leave":        discord.Color(int("FF0000", 16)),  # Rouge
     "stream_start": discord.Color(int("800080", 16)),  # Violet
-    "stream_end":   discord.Color(int("9932CC", 16)),  # Violet foncé
-    "mute":         discord.Color(int("FFA500", 16)),  # Orange
-    "unmute":       discord.Color(int("0000FF", 16)),  # Bleu
-    "deafen":       discord.Color(int("FFD700", 16)),  # Or
-    "undeafen":     discord.Color(int("008080", 16)),  # Teal
-    "video":        discord.Color(int("FF00FF", 16)),  # Magenta
-    "no_video":     discord.Color(int("808080", 16)),  # Gris
+    "stream_end":   discord.Color(int("800080", 16)),  # Violet
+    "mute":         discord.Color(int("FF0000", 16)),  # Rouge
+    "unmute":       discord.Color(int("00FF00", 16)),  # Vert
+    "deafen":       discord.Color(int("FF0000", 16)),  # Rouge
+    "undeafen":     discord.Color(int("00FF00", 16)),  # Vert
+    "video":        discord.Color(int("00FF00", 16)),  # Vert
+    "no_video":     discord.Color(int("FF0000", 16)),  # Rouge
     "move":          discord.Color(int("800080", 16)),  # Violet
     "status_set":    discord.Color(int("00FF00", 16)),  # Vert
     "status_remove": discord.Color(int("FF0000", 16))   # Rouge
@@ -80,50 +70,54 @@ VOICE_COLORS = {
 # --- Couleurs stage / conférence ---
 STAGE_COLORS = {
     "created": discord.Color(int("00FF00", 16)),  # Vert
-    "edited":  discord.Color(int("0000FF", 16)),  # Bleu
+    "edited":  discord.Color(int("FFD700", 16)),  # Jaune
     "deleted": discord.Color(int("FF0000", 16))   # Rouge
 }
 
 # --- Couleurs des logs membres ---
 MEMBER_COLORS = {
     "bot_join":    discord.Color(int("00FF00", 16)),  # Vert
-    "bot_leave":   discord.Color(int("FFA500", 16)),  # Orange
+    "bot_leave":   discord.Color(int("FF0000", 16)),  # Rouge
     "join":        discord.Color(int("00FF00", 16)),  # Vert
     "leave":       discord.Color(int("FF0000", 16)),  # Rouge
     "role_add":    discord.Color(int("00FF00", 16)),  # Vert
-    "role_remove": discord.Color(int("FFA500", 16)),  # Orange
-    "nick_change": discord.Color(int("0000FF", 16))   # Bleu
+    "role_remove": discord.Color(int("FF0000", 16)),  # Rouge
+    "nick_change": discord.Color(int("FFD700", 16))   # Jaune
 }
 
 # --- Couleurs des logs messages ---
 MESSAGE_COLORS = {
     "deleted":      discord.Color(int("FF0000", 16)),  # Rouge
-    "edited":       discord.Color(int("0000FF", 16)),  # Bleu
-    "bulk_delete":  discord.Color(int("FFA500", 16)),  # Orange
+    "edited":       discord.Color(int("FFD700", 16)),  # Jaune
+    "bulk_delete":  discord.Color(int("FF0000", 16)),  # Rouge
     "poll_deleted": discord.Color(int("FF0000", 16)),  # Rouge
-    "pin":          discord.Color(int("FFD700", 16)),  # Or
-    "unpin":        discord.Color(int("DCDCDC", 16)),  # Gris clair
+    "pin":          discord.Color(int("00FF00", 16)),  # Vert
+    "unpin":        discord.Color(int("FF0000", 16)),  # Rouge
     "reaction":     discord.Color(int("FF0000", 16)),  # Rouge
     "file_deleted": discord.Color(int("FF0000", 16))   # Rouge
 }
 
 # --- Couleurs des logs threads ---
 THREAD_COLORS = {
-    "created": discord.Color(int("0000FF", 16)),  # Bleu
-    "deleted": discord.Color(int("FF0000", 16)),  # Rouge
-    "updated": discord.Color(int("FFA500", 16))   # Orange
+    "created":   discord.Color(int("00FF00", 16)),  # Vert
+    "deleted":   discord.Color(int("FF0000", 16)),  # Rouge
+    "updated":   discord.Color(int("FFD700", 16)),  # Jaune
+    "locked":    discord.Color(int("FF0000", 16)),  # Rouge
+    "unlocked":  discord.Color(int("00FF00", 16)),  # Vert
+    "closed":    discord.Color(int("FF0000", 16)),  # Rouge
+    "reopened":  discord.Color(int("00FF00", 16))   # Vert
 }
 
 # --- Couleurs des logs channels ---
 CHANNEL_COLORS = {
     "created":   discord.Color(int("00FF00", 16)),  # Vert
     "deleted":   discord.Color(int("FF0000", 16)),  # Rouge
-    "edited":    discord.Color(int("0000FF", 16)),  # Bleu
+    "edited":    discord.Color(int("FFD700", 16)),  # Jaune
     "permission_created": discord.Color(int("00FF00", 16)),  # Vert
     "permission_deleted": discord.Color(int("FF0000", 16)),  # Rouge
-    "permission_edited":  discord.Color(int("FFA500", 16)),  # Orange
+    "permission_edited":  discord.Color(int("FFD700", 16)),  # Jaune
     "followed":           discord.Color(int("800080", 16)),  # Violet
-    "followed_updated":   discord.Color(int("9932CC", 16)),  # Violet foncé
+    "followed_updated":   discord.Color(int("800080", 16)),  # Violet
     "unfollowed":         discord.Color(int("FF0000", 16))   # Rouge
 }
 
@@ -131,14 +125,13 @@ CHANNEL_COLORS = {
 WEBHOOK_COLORS = {
     "created":  discord.Color(int("00FF00", 16)),  # Vert
     "deleted":  discord.Color(int("FF0000", 16)),  # Rouge
-    "edited":   discord.Color(int("0000FF", 16)),  # Bleu
-    "updated":  discord.Color(int("9932CC", 16))   # Violet foncé
+    "edited":   discord.Color(int("FFD700", 16))   # Jaune
 }
 
 # --- Couleurs des logs invitations ---
 INVITE_COLORS = {
     "created":  discord.Color(int("00FF00", 16)),  # Vert
-    "modified": discord.Color(int("0000FF", 16)),  # Bleu
+    "modified": discord.Color(int("FFD700", 16)),  # Jaune
     "deleted":  discord.Color(int("FF0000", 16))   # Rouge
 }
 
@@ -146,20 +139,20 @@ INVITE_COLORS = {
 EMOJI_COLORS = {
     "added":   discord.Color(int("00FF00", 16)),  # Vert
     "removed": discord.Color(int("FF0000", 16)),  # Rouge
-    "edited":  discord.Color(int("5865F2", 16))   # Bleu
+    "edited":  discord.Color(int("FFD700", 16))   # Jaune
 }
 
 # --- Couleurs des logs soundboard ---
 SOUNDBOARD_COLORS = {
     "added":     discord.Color(int("00FF00", 16)),  # Vert
-    "modified":  discord.Color(int("0000FF", 16)),  # Bleu
+    "modified":  discord.Color(int("FFD700", 16)),  # Jaune
     "removed":   discord.Color(int("FF0000", 16))   # Rouge
 }
 
 # --- Couleurs des logs stickers ---
 STICKER_COLORS = {
     "created":  discord.Color(int("00FF00", 16)),  # Vert
-    "modified": discord.Color(int("0000FF", 16)),  # Bleu
+    "modified": discord.Color(int("FFD700", 16)),  # Jaune
     "deleted":  discord.Color(int("FF0000", 16))   # Rouge
 }
 
@@ -167,7 +160,7 @@ STICKER_COLORS = {
 EVENT_COLORS = {
     "created":  discord.Color(int("00FF00", 16)),  # Vert
     "deleted":  discord.Color(int("FF0000", 16)),  # Rouge
-    "edited":   discord.Color(int("0000FF", 16))   # Bleu
+    "edited":   discord.Color(int("FFD700", 16))   # Jaune
 }
 
 # --- Couleur liste sanctions ---
@@ -175,15 +168,15 @@ SANCTIONLIST_COLOR = discord.Color(int("800080", 16))  # Violet
 
 # --- Couleurs serveur ---
 SERVER_COLORS = {
-    "edited":       discord.Color(int("0000FF", 16)),  # Bleu
-    "boost_add":    discord.Color(int("00FF00", 16)),   # Vert
-    "boost_remove": discord.Color(int("FF0000", 16)),   # Rouge
-    "booster_add":  discord.Color(int("00FF00", 16)),   # Vert
+    "edited":       discord.Color(int("FFD700", 16)),  # Jaune
+    "boost_add":    discord.Color(int("00FF00", 16)),  # Vert
+    "boost_remove": discord.Color(int("FF0000", 16)),  # Rouge
+    "booster_add":  discord.Color(int("00FF00", 16)),  # Vert
     "booster_remove": discord.Color(int("FF0000", 16))  # Rouge
 }
 
 # --- Couleur par défaut (fallback) ---
-DEFAULT_COLOR = discord.Color(int("0000FF", 16))  # Bleu
+DEFAULT_COLOR = discord.Color(int("FFD700", 16))  # Jaune
 
 
 # ================== EMOJIS CUSTOM ===========================
@@ -328,7 +321,6 @@ TEXTS = {
     "hello_response":          "Salut",
     "profile_error":           "Une erreur est survenue lors de l'affichage du profil.",
     "profile_no_roles":        "Aucun rôle",
-    "profile_unknown_date":    "Inconnu",
     "profile_not_on_server":   "Inconnu (Pas sur le serveur)",
     "profile_off_server":      "Membre hors serveur",
     "sync_success":            "✅ Sync effectué !",
@@ -491,9 +483,6 @@ TEXTS = {
     "server_system_enabled":            "Activé",
     "server_system_disabled":           "Désactivé",
 
-    "server_banner_field":              "Bannière serveur",
-    "server_banner_old":                "Ancienne bannière",
-
     # --- Logs : boost ---
     "boost_add_title":                  "AJOUT BOOST SERVEUR",
     "boost_remove_title":               "RETRAIT BOOST SERVEUR",
@@ -520,7 +509,6 @@ TEXTS = {
     "member_bot_leave_title":           "BOT RETIRÉ",
     "member_leave_title":               "DÉPART",
     "member_leave_desc":                "a quitté",
-    "member_kicked_desc":               "a été {reason} par",
     "member_joined_at":                 "A rejoint",
     "member_roles":                     "Rôles",
     "member_role_add_title":            "RÔLES AJOUTÉS",
@@ -581,22 +569,16 @@ TEXTS = {
     "thread_deleted_text":              "a supprimé le fil",
     "thread_deleted_unknown":           "Fil supprimé",
     "thread_modified_title":            "FIL MODIFIÉ",
-    "thread_modified_text":             "a effectué plusieurs modifications",
-    "thread_slowmode":                  "mode lent",
-    "thread_inactivity":                "période d'inactivité",
-    "thread_locked":                    "a verrouillé le fil",
-    "thread_unlocked":                  "a déverrouillé le fil",
-    "thread_closed":                    "a fermé le fil",
-    "thread_unknown_channel":           "Inconnu",
+    "thread_locked_title":              "FIL VÉRROUILLÉ",
+    "thread_unlocked_title":            "FIL DÉVERROUILLÉ",
+    "thread_closed_title":              "FIL FERMÉ",
+    "thread_reopened_title":            "FIL ROUVERT",
 
     # --- Logs : stage / conférence ---
     "stage_created_title":              "CONFÉRENCE LANCÉ",
     "stage_created_desc":               "a lancé une conférence",
-    "stage_topic":                      "Sujet",
     "stage_speaker_added_title":        "NOUVEL INTERVENANT",
-    "stage_speaker_added_desc":         "est devenu intervenant",
     "stage_speaker_invited_title":      "INVITATION CONFÉRENCIÈR",
-    "stage_speaker_invited_desc":       "a été invité à discuter",
     "stage_deleted_title":              "CONFÉRENCE FINI",
     "stage_deleted_desc":               "a été arrêtée par",
     "stage_speaker_removed_title":      "DISCUSSION QUITTÉE",
@@ -670,7 +652,26 @@ TEXTS = {
     "invite_unknown_inviter":           "Inconnu",
     "invite_uses_field":                "Utilisation",
     "invite_created_by_field":          "Créé par",
-    "invite_unlimited":                 "Illimité",
+
+    # --- Logs : webhooks ---
+    "webhook_created_title":            "WEBHOOK CRÉÉ",
+    "webhook_deleted_title":            "WEBHOOK SUPPRIMÉ",
+    "webhook_updated_title":            "WEBHOOK MODIFIÉ",
+    "webhook_created_desc":             "Le webhook **{name}** à été créé",
+    "webhook_deleted_desc":             "Le webhook **{name}** à été supprimé",
+    "webhook_updated_desc":             "Le webhook **{name}** à été modifié",
+    "webhook_moved_desc":               "Le webhook **{name}** à été déplacé",
+    "webhook_name_field":               "Nom",
+    "webhook_channel_field":            "Channel",
+    "webhook_by_field":                 "Par",
+
+    # --- Logs : webhooks avatar ---
+    "webhook_avatar_added_title":       "WEBHOOK AVATAR AJOUTÉ",
+    "webhook_avatar_updated_title":     "WEBHOOK AVATAR MODIFIÉ",
+    "webhook_avatar_removed_title":     "WEBHOOK AVATAR RETIRÉ",
+    "webhook_avatar_added_desc":        "L'avatar du webhook **{name}** à été ajouté",
+    "webhook_avatar_updated_desc":      "L'avatar du webhook **{name}** à été modifié",
+    "webhook_avatar_removed_desc":      "L'avatar du webhook **{name}** à été retiré",
 
     # --- Logs : channels ---
     "channel_created_title":            "CHANNEL {type} CRÉÉ",
@@ -678,6 +679,10 @@ TEXTS = {
     "channel_created_in_category":      " dans la catégorie {category}",
     "channel_deleted_title":            "CHANNEL {type} SUPPRIMÉ",
     "channel_deleted_desc":             "Le channel {channel} à été supprimé par {moderator}",
+    "category_created_title":           "CATÉGORIE CRÉÉE",
+    "category_deleted_title":           "CATÉGORIE SUPPRIMÉE",
+    "category_created_desc":            "La catégorie {channel} à été créée par {moderator}",
+    "category_deleted_desc":            "La catégorie {channel} à été supprimée par {moderator}",
     "channel_deleted_in_category":      " dans la catégorie {category}",
     "channel_type_text":                "TEXTE",
     "channel_type_voice":               "VOCAL",
@@ -687,26 +692,26 @@ TEXTS = {
     "channel_type_category":            "CATÉGORIE",
     "channel_type_unknown":             "INCONNU",
     "channel_field":                    "Channel",
-    "channel_category_field":           "Catégorie",
+
+    # --- Logs : permissions de channel ---
+    "channel_perm_created_title":       "PERMISSIONS AJOUTÉES",
+    "channel_perm_deleted_title":       "PERMISSIONS RETIRÉES",
+    "channel_perm_updated_title":       "PERMISSIONS MODIFIÉES",
+    "channel_perm_old_field":           "Ancienne(s) permission(s)",
+    "channel_perm_new_field":           "Nouvelle(s) permission(s)",
+    "channel_perm_for_role":            "pour le rôle",
 
     # --- Logs : emojis ---
     "emoji_added_title":                "EMOJI CRÉÉ",
-    "emoji_added_desc":                 "a ajouté un emoji",
     "emoji_removed_title":              "EMOJI SUPPRIMÉ",
-    "emoji_removed_desc":               "a supprimé un emoji",
     "emoji_edited_title":               "EMOJI MODIFIÉ",
     "emoji_name_field":                 "Nom",
     "emoji_id_field":                   "ID",
-    "emoji_animated_field":             "Animé",
-    "emoji_yes":                        "Oui",
-    "emoji_no":                         "Non",
 
     # --- Logs : soundboard ---
     "soundboard_added_title":           "SOUNDBOARD AJOUTÉ",
-    "soundboard_added_desc":            "a été ajouté par",
     "soundboard_modified_title":        "SOUNDBOARD MODIFIÉ",
     "soundboard_modified_by":           "Modifié par",
-    "soundboard_modification":          "Modification",
 
     # --- Logs : stickers ---
     "sticker_created_title":            "STICKERS CRÉÉ",
@@ -728,6 +733,73 @@ TEXTS = {
     "event_new_description_field":      "Nouvelle description",
     "event_new_location_field":         "Nouvel emplacement",
     "event_new_start_field":            "Nouvelle date/heure",
+}
+
+
+# ============ TRADUCTION DES PERMISSIONS =====================
+# Mapping nom technique discord.py -> nom français lisible.
+# Utilisé pour les logs de permissions de channel.
+
+PERMISSION_LABELS_FR = {
+    "administrator":                "Administrateur",
+    "view_audit_log":               "Voir les logs d'audit",
+    "view_guild_insights":          "Voir les analyses du serveur",
+    "manage_guild":                 "Gérer le serveur",
+    "change_nickname":              "Changer de pseudo",
+    "manage_nicknames":             "Gérer les pseudos",
+    "kick_members":                 "Expulser des membres",
+    "ban_members":                  "Bannir des membres",
+    "moderate_members":             "Exclure temporairement (timeout)",
+    "create_expressions":           "Créer des expressions",
+    "manage_expressions":           "Gérer les expressions",
+    "manage_emojis":                "Gérer les emojis",
+    "manage_emojis_and_stickers":   "Gérer les emojis et stickers",
+    "manage_events":                "Gérer les événements",
+    "create_events":                "Créer des événements",
+    "view_creator_monetization_analytics": "Voir les analyses de monétisation",
+    "manage_webhooks":              "Gérer les webhooks",
+    "view_channel":                 "Voir le salon",
+    "read_messages":                "Lire les messages",
+    "read_message_history":         "Voir l'historique des messages",
+    "send_messages":                "Envoyer des messages",
+    "send_tts_messages":            "Envoyer des messages TTS",
+    "send_polls":                   "Envoyer des sondages",
+    "create_polls":                 "Créer des sondages",
+    "embed_links":                  "Intégrer des liens",
+    "attach_files":                 "Joindre des fichiers",
+    "mention_everyone":             "Mentionner @\u200beveryone/@\u200bhere",
+    "external_emojis":              "Utiliser des emojis externes",
+    "use_external_emojis":          "Utiliser des emojis externes",
+    "external_stickers":            "Utiliser des stickers externes",
+    "use_external_stickers":        "Utiliser des stickers externes",
+    "add_reactions":                "Ajouter des réactions",
+    "use_external_apps":            "Utiliser des apps externes",
+    "use_application_commands":     "Utiliser les commandes d'application",
+    "manage_messages":              "Gérer les messages",
+    "manage_threads":               "Gérer les fils",
+    "create_public_threads":        "Créer des fils publics",
+    "create_private_threads":       "Créer des fils privés",
+    "send_messages_in_threads":     "Envoyer des messages dans les fils",
+    "pin_messages":                 "Épingler des messages",
+    "manage_channels":              "Gérer le salon",
+    "manage_permissions":           "Gérer les permissions",
+    "manage_roles":                 "Gérer les rôles",
+    "create_instant_invite":        "Créer une invitation",
+    "send_voice_messages":          "Envoyer des messages vocaux",
+    "use_soundboard":               "Utiliser le soundboard",
+    "use_external_sounds":          "Utiliser des sons externes",
+    "priority_speaker":             "Haut-parleur prioritaire",
+    "stream":                       "Partager son écran",
+    "connect":                      "Se connecter",
+    "speak":                        "Parler",
+    "use_voice_activation":         "Utiliser la détection de voix",
+    "mute_members":                 "Rendre muet (voix)",
+    "deafen_members":               "Mettre en sourdine (voix)",
+    "move_members":                 "Déplacer des membres",
+    "request_to_speak":             "Demander à parler",
+    "use_embedded_activities":      "Utiliser les activités",
+    "set_voice_channel_status":     "Définir le statut du salon vocal",
+    "bypass_slowmode":              "Contourner le mode lent",
 }
 
 
@@ -837,10 +909,29 @@ LOG_TYPE_IDS = {
     "thread_create":          51,
     "thread_delete":          52,
     "thread_update":          53,
+    "thread_locked":          83,
+    "thread_unlocked":        84,
+    "thread_closed":          85,
+    "thread_reopened":        86,
 
     # --- Channels (#L54 - #L55) ---
     "channel_create":         54,
     "channel_delete":         55,
+
+    # --- Channels permissions (#L74 - #L76) ---
+    "channel_permission_create":  74,
+    "channel_permission_delete":  75,
+    "channel_permission_update":  76,
+
+    # --- Webhooks (#L77 - #L79) ---
+    "webhook_create":         77,
+    "webhook_delete":         78,
+    "webhook_update":         79,
+
+    # --- Webhooks avatar (#L80 - #L82) ---
+    "webhook_avatar_added":   80,
+    "webhook_avatar_updated": 81,
+    "webhook_avatar_removed": 82,
 
     # --- Invitations (#L56 - #L57) ---
     "invite_create":          56,

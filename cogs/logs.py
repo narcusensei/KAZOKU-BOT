@@ -16,7 +16,7 @@ from settings import (
     SERVER_COLORS, CHANNEL_COLORS, WEBHOOK_COLORS, DEFAULT_COLOR,
     AUDIT_LOG_LIMIT, CONTENT_MAX_LENGTH, MEMBERS_FILE, DATA_DIR, truncate_text,
     AUDIT_LOG_DELAY_SHORT, AUDIT_LOG_DELAY_DEFAULT, AUDIT_LOG_DELAY_LONG, AUDIT_LOG_DELAY_SLOW,
-    LOG_TYPE_IDS
+    LOG_TYPE_IDS, PERMISSION_LABELS_FR
 )
 
 # --- CONSTANTES LOCALES (non configurables) ---
@@ -192,6 +192,18 @@ def get_channel_log_type_str(channel) -> str:
             return TEXTS["channel_type_news"]
         return TEXTS["channel_type_text"]
     return TEXTS["channel_type_unknown"]
+
+
+def get_channel_log_title(channel, action: str) -> str:
+    """Retourne le titre du log selon le type de channel et l'action.
+
+    Pour les catégories, on renvoie "CATÉGORIE CRÉÉE/SUPPRIMÉE" (sans préfixe CHANNEL).
+    Pour les autres types : "CHANNEL {TYPE} CRÉÉ/SUPPRIMÉ".
+    """
+    if isinstance(channel, discord.CategoryChannel):
+        return TEXTS["category_created_title"] if action == "created" else TEXTS["category_deleted_title"]
+    type_str = get_channel_log_type_str(channel)
+    return TEXTS["channel_created_title"].format(type=type_str) if action == "created" else TEXTS["channel_deleted_title"].format(type=type_str)
 
 
 def get_event_location_str(event):
@@ -1277,6 +1289,7 @@ class Logs(commands.Cog):
         if not channel:
             return
 
+        # Vrai nouveau fil
         creator = thread.guild.get_member(thread.owner_id)
         if not creator:
             try:
@@ -1294,6 +1307,44 @@ class Logs(commands.Cog):
         embed.add_field(name=TEXTS["thread_field"], value=thread.mention, inline=True)
         embed.add_field(name=TEXTS["link_field"], value=f"[{TEXTS['jump_to_message']}]({thread.jump_url})", inline=False)
         embed.set_footer(text=self._footer("thread_create", creator.id))
+        await channel.send(embed=embed)
+
+    @commands.Cog.listener()
+    async def on_thread_join(self, thread):
+        """Se déclenche quand le bot rejoint un fil.
+
+        Discord dispatche cet événement (et non on_thread_update) quand un fil archivé
+        est rouvert : le fil ayant été retiré du cache à l'archivage, sa réouverture est
+        vue comme un "join". On détecte ce cas via l'âge du fil (récent = vrai join, ancien = réouverture).
+        """
+        if not thread.guild:
+            return
+
+        channel = self._get_log_channel("message")
+        if not channel:
+            return
+
+        # Un fil rouvert existe depuis longtemps (> 30s), contrairement à un fil qu'on rejoint récemment
+        age_seconds = (datetime.now(timezone.utc) - thread.created_at).total_seconds()
+        if age_seconds <= 30:
+            return  # Vrai join récent, pas une réouverture
+
+        # C'est une réouverture de fil archivé
+        await asyncio.sleep(AUDIT_LOG_DELAY_DEFAULT)
+        moderator = await self._get_moderator_from_audit_log(
+            thread.guild, thread.id, [discord.AuditLogAction.thread_update]
+        )
+        member = moderator or thread.guild.get_member(thread.owner_id) or thread.guild.me
+
+        embed = discord.Embed(color=THREAD_COLORS["reopened"])
+        embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
+        embed.description = f'{CUSTOM_EMOJIS["thread_unlock"]} **{TEXTS["thread_reopened_title"]}**\n\n{member.mention} a `rouvert` le fil'
+
+        parent_channel = thread.parent
+        embed.add_field(name=TEXTS["voice_channel"], value=parent_channel.mention if parent_channel else TEXTS["unknown"], inline=True)
+        embed.add_field(name=TEXTS["thread_field"], value=thread.mention, inline=True)
+        embed.add_field(name=TEXTS["link_field"], value=f"[{TEXTS['jump_to_message']}]({thread.jump_url})", inline=False)
+        embed.set_footer(text=self._footer("thread_reopened", member.id))
         await channel.send(embed=embed)
 
     @commands.Cog.listener()
@@ -1349,58 +1400,79 @@ class Logs(commands.Cog):
 
         # Collecter toutes les modifications
         modifications = []
+        primary_action = None  # type d'action dominant si modification unique
 
         # Changement de nom
         if before.name != after.name:
-            modifications.append(f'{CUSTOM_EMOJIS["thread_edited"]} a changé le nom du fil | **{before.name}** >>> **{after.name}**')
+            modifications.append(f'a changé le nom du fil | **{before.name}** >>> **{after.name}**')
 
         # Changement mode lent
         if before.slowmode_delay != after.slowmode_delay:
-            modifications.append(f'{CUSTOM_EMOJIS["slowmode"]} a changé le mode lent | `{format_slowmode(before.slowmode_delay)}` >>> `{format_slowmode(after.slowmode_delay)}`')
+            modifications.append(f'a changé le mode lent | `{format_slowmode(before.slowmode_delay)}` >>> `{format_slowmode(after.slowmode_delay)}`')
 
         # Changement période d'inactivité
         if before.auto_archive_duration != after.auto_archive_duration:
-            modifications.append(f'{CUSTOM_EMOJIS["inactive_period"]} a changé la période d\'inactivité | `{format_archive(before.auto_archive_duration)}` >>> `{format_archive(after.auto_archive_duration)}`')
+            modifications.append(f"a changé la période d'inactivité | `{format_archive(before.auto_archive_duration)}` >>> `{format_archive(after.auto_archive_duration)}`")
 
         # Verrouillage / Déverrouillage
         if before.locked != after.locked:
             if after.locked:
-                modifications.append(f'{CUSTOM_EMOJIS["thread_lock"]} a `verrouillé` le fil')
+                modifications.append('a `verrouillé` le fil')
+                primary_action = "locked"
             else:
-                modifications.append(f'{CUSTOM_EMOJIS["thread_unlock"]} a `déverrouillé` le fil')
+                modifications.append('a `déverrouillé` le fil')
+                primary_action = "unlocked"
 
-        # Fermeture
+        # Fermeture / Ouverture
         if not before.archived and after.archived:
-            modifications.append(f'{CUSTOM_EMOJIS["thread_close"]} a `fermé` le fil')
+            modifications.append('a `fermé` le fil')
+            primary_action = "closed"
+        elif before.archived and not after.archived:
+            modifications.append('a `rouvert` le fil')
+            primary_action = "reopened"
 
         if not modifications:
             return
 
-        # Déterminer l'emoji en fonction du type de modification
+        # Déterminer l'emoji, le titre et le log_type en fonction du type de modification
         emoji = CUSTOM_EMOJIS["thread_edited"]
-        if len(modifications) == 1:
-            mod_text = modifications[0]
-            if "verrouillé" in mod_text:
+        title = TEXTS['thread_modified_title']
+        log_type = "thread_update"
+        color = THREAD_COLORS["updated"]
+
+        # Si une seule modification, spécialiser l'emoji/titre/log_type/couleur selon l'action
+        if len(modifications) == 1 and primary_action:
+            if primary_action == "locked":
                 emoji = CUSTOM_EMOJIS["thread_lock"]
-            elif "déverrouillé" in mod_text:
+                title = TEXTS['thread_locked_title']
+                log_type = "thread_locked"
+                color = THREAD_COLORS["locked"]
+            elif primary_action == "unlocked":
                 emoji = CUSTOM_EMOJIS["thread_unlock"]
-            elif "fermé" in mod_text:
+                title = TEXTS['thread_unlocked_title']
+                log_type = "thread_unlocked"
+                color = THREAD_COLORS["unlocked"]
+            elif primary_action == "closed":
                 emoji = CUSTOM_EMOJIS["thread_close"]
-            elif "mode lent" in mod_text:
-                emoji = CUSTOM_EMOJIS["slowmode"]
-            elif "inactivité" in mod_text:
-                emoji = CUSTOM_EMOJIS["inactive_period"]
+                title = TEXTS['thread_closed_title']
+                log_type = "thread_closed"
+                color = THREAD_COLORS["closed"]
+            elif primary_action == "reopened":
+                emoji = CUSTOM_EMOJIS["thread_unlock"]
+                title = TEXTS['thread_reopened_title']
+                log_type = "thread_reopened"
+                color = THREAD_COLORS["reopened"]
 
         # Créer l'embed avec toutes les modifications
-        embed = discord.Embed(color=THREAD_COLORS["updated"])
+        embed = discord.Embed(color=color)
         embed.set_author(name=moderator.display_name, icon_url=moderator.display_avatar.url)
 
         if len(modifications) == 1:
             # Une seule modification : format simple
-            embed.description = f"{emoji} **{TEXTS['thread_modified_title']}**\n\n{moderator.mention} {modifications[0]}"
+            embed.description = f"{emoji} **{title}**\n\n{moderator.mention} {modifications[0]}"
         else:
             # Plusieurs modifications : regrouper
-            embed.description = f"{emoji} **{TEXTS['thread_modified_title']}**\n\n{moderator.mention} {TEXTS['multiple_modifications_desc']}"
+            embed.description = f"{emoji} **{title}**\n\n{moderator.mention} {TEXTS['multiple_modifications_desc']}"
             for i, mod in enumerate(modifications, 1):
                 embed.add_field(name=f"{TEXTS['modification_field']} {i}", value=mod, inline=False)
 
@@ -1408,7 +1480,7 @@ class Logs(commands.Cog):
         embed.add_field(name=TEXTS["voice_channel"], value=parent_channel.mention if parent_channel else TEXTS["unknown"], inline=True)
         embed.add_field(name=TEXTS["thread_field"], value=after.mention, inline=True)
         embed.add_field(name=TEXTS["link_field"], value=f"[{TEXTS['jump_to_message']}]({after.jump_url})", inline=False)
-        embed.set_footer(text=self._footer("thread_update", moderator.id))
+        embed.set_footer(text=self._footer(log_type, moderator.id))
         await channel.send(embed=embed)
 
     # --- LOGS CHANNELS ---
@@ -1429,16 +1501,21 @@ class Logs(commands.Cog):
         )
 
         member = moderator or channel.guild.me
-        channel_type_str = get_channel_log_type_str(channel)
+        is_category = isinstance(channel, discord.CategoryChannel)
 
         embed = discord.Embed(color=CHANNEL_COLORS["created"])
         embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
-        embed.description = f'{CUSTOM_EMOJIS["channel_created"]} **{TEXTS["channel_created_title"].format(type=channel_type_str)}**'
+        embed.description = f'{CUSTOM_EMOJIS["channel_created"]} **{get_channel_log_title(channel, "created")}**'
 
-        # Description : mention du channel + admin (+ catégorie si applicable)
-        desc = TEXTS["channel_created_desc"].format(channel=channel.mention, moderator=member.mention)
-        if channel.category:
-            desc += TEXTS["channel_created_in_category"].format(category=channel.category.mention)
+        # Description : mention du channel + admin (+ catégorie parente si applicable)
+        if is_category:
+            channel_display = f"`{channel.name}`"
+            desc = TEXTS["category_created_desc"].format(channel=channel_display, moderator=member.mention)
+        else:
+            channel_display = channel.mention
+            desc = TEXTS["channel_created_desc"].format(channel=channel_display, moderator=member.mention)
+            if channel.category:
+                desc += TEXTS["channel_created_in_category"].format(category=channel.category.mention)
         embed.add_field(name=TEXTS["voice_information"], value=desc, inline=False)
 
         embed.set_footer(text=self._footer("channel_create", member.id))
@@ -1460,22 +1537,204 @@ class Logs(commands.Cog):
         )
 
         member = moderator or channel.guild.me
-        channel_type_str = get_channel_log_type_str(channel)
-        # Channel supprimé : utiliser #name (la mention afficherait #deleted-channel)
-        channel_display = f"**#{channel.name}**"
+        is_category = isinstance(channel, discord.CategoryChannel)
+        # Channel supprimé : la mention afficherait #deleted-channel, on utilise le nom
+        channel_display = f"`{channel.name}`"
         category_display = channel.category.name if channel.category else None
 
         embed = discord.Embed(color=CHANNEL_COLORS["deleted"])
         embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
-        embed.description = f'{CUSTOM_EMOJIS["channel_deleted"]} **{TEXTS["channel_deleted_title"].format(type=channel_type_str)}**'
+        embed.description = f'{CUSTOM_EMOJIS["channel_deleted"]} **{get_channel_log_title(channel, "deleted")}**'
 
-        desc = TEXTS["channel_deleted_desc"].format(channel=channel_display, moderator=member.mention)
-        if category_display:
-            desc += TEXTS["channel_deleted_in_category"].format(category=category_display)
+        if is_category:
+            desc = TEXTS["category_deleted_desc"].format(channel=channel_display, moderator=member.mention)
+        else:
+            desc = TEXTS["channel_deleted_desc"].format(channel=channel_display, moderator=member.mention)
+            if category_display:
+                desc += TEXTS["channel_deleted_in_category"].format(category=category_display)
         embed.add_field(name=TEXTS["voice_information"], value=desc, inline=False)
 
         embed.set_footer(text=self._footer("channel_delete", member.id))
         await log_channel.send(embed=embed)
+
+    @commands.Cog.listener()
+    async def on_guild_channel_update(self, before, after):
+        """Se déclenche quand un channel est modifié (permissions uniquement)."""
+        if not after.guild:
+            return
+
+        log_channel = self._get_log_channel("channel")
+        if not log_channel:
+            return
+
+        # Ne logger QUE les changements d'overwrites (les autres modifs de channel
+        # ne sont pas gérées ici pour éviter le bruit).
+        if before.overwrites == after.overwrites:
+            return
+
+        # Identifier les cibles (roles/members) dont les overwrites ont changé.
+        before_ow = {t.id: ow for t, ow in before.overwrites.items()}
+        after_ow = {t.id: (t, ow) for t, ow in after.overwrites.items()}
+
+        changes = []  # [(action_key, target, old_ow, new_ow)]
+        for target_id, (target, new_overwrite) in after_ow.items():
+            if target_id not in before_ow:
+                # Nouvel overwrite -> permission créée
+                changes.append(("created", target, None, new_overwrite))
+            elif before_ow[target_id] != new_overwrite:
+                # Overwrite existant modifié -> permission mise à jour
+                changes.append(("updated", target, before_ow[target_id], new_overwrite))
+        for target_id, old_overwrite in before_ow.items():
+            if target_id not in after_ow:
+                # Overwrite supprimé -> permission retirée
+                # On reconstruit un pseudo-target depuis l'id (déjà supprimé du cache)
+                target = after.guild.get_role(target_id) or after.guild.get_member(target_id) or target_id
+                changes.append(("deleted", target, old_overwrite, None))
+
+        if not changes:
+            return
+
+        # Récupérer les entries audit log overwrite récentes pour identifier modérateur + cible.
+        await asyncio.sleep(AUDIT_LOG_DELAY_DEFAULT)
+        audit_entries = []  # [{action, user, extra, target_id}]
+        try:
+            async for entry in after.guild.audit_logs(limit=50):
+                if entry.action not in (
+                    discord.AuditLogAction.overwrite_create,
+                    discord.AuditLogAction.overwrite_update,
+                    discord.AuditLogAction.overwrite_delete
+                ):
+                    continue
+                if not (entry.target and getattr(entry.target, 'id', None) == after.id):
+                    continue
+                log_time = entry.created_at
+                if (datetime.now(timezone.utc) - log_time).total_seconds() < 120:
+                    extra_id = getattr(entry.extra, 'id', None) if entry.extra else None
+                    audit_entries.append({
+                        'action': entry.action,
+                        'user': entry.user,
+                        'extra_id': extra_id,
+                        'extra': entry.extra,
+                    })
+        except (discord.Forbidden, discord.HTTPException, AttributeError):
+            pass
+
+        for action_key, target, old_ow, new_ow in changes:
+            # Le target peut être un Role, un Member, un Object ou un int (id brute)
+            target_id = target if isinstance(target, int) else target.id
+            # Cas spécial : le rôle @everyone (rôle par défaut du serveur).
+            # role.mention retourne <@&{id}> mais Discord le rend en ajoutant "@" + "@everyone"
+            # (car le nom interne du rôle est "@everyone"), ce qui donne "@@everyone".
+            # Solution : utiliser role.name qui vaut déjà "@everyone" (avec un seul @).
+            if isinstance(target, discord.Role) and target.is_default():
+                target_mention = target.name  # "@everyone"
+            else:
+                target_mention = getattr(target, 'mention', f"<@&{target_id}>")
+
+            # Associer l'entry audit log correspondante (par extra_id == target_id)
+            moderator = None
+            for ae in audit_entries:
+                if ae['extra_id'] == target_id:
+                    moderator = ae['user']
+                    break
+            # Fallback : premier modérateur trouvé si pas de match précis
+            if not moderator and audit_entries:
+                moderator = audit_entries[0]['user']
+
+            member = moderator or after.guild.me
+
+            # Emoji + couleur + titre selon l'action
+            if action_key == "created":
+                color = CHANNEL_COLORS["permission_created"]
+                emoji = CUSTOM_EMOJIS["channel_permission_created"]
+                title = TEXTS["channel_perm_created_title"]
+                log_type = "channel_permission_create"
+            elif action_key == "deleted":
+                color = CHANNEL_COLORS["permission_deleted"]
+                emoji = CUSTOM_EMOJIS["channel_permission_deleted"]
+                title = TEXTS["channel_perm_deleted_title"]
+                log_type = "channel_permission_delete"
+            else:
+                color = CHANNEL_COLORS["permission_edited"]
+                emoji = CUSTOM_EMOJIS["channel_permission_edited"]
+                title = TEXTS["channel_perm_updated_title"]
+                log_type = "channel_permission_update"
+
+            # Nom du channel : "de la catégorie `name`" ou "du channel #mention"
+            if isinstance(after, discord.CategoryChannel):
+                channel_text = f"de la catégorie `{after.name}`"
+            else:
+                channel_text = f"du channel {after.mention}"
+
+            embed = discord.Embed(color=color)
+            embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
+            embed.description = (
+                f'{emoji} **{title}**\n'
+                f'{member.mention} a modifié les permissions {channel_text} {TEXTS["channel_perm_for_role"]} {target_mention}'
+            )
+
+            # Afficher les permissions old / new (uniquement les différences)
+            if action_key == "created":
+                # Nouvel overwrite : tout est nouveau, afficher la nouvelle version
+                perm_lines = self._format_perms(new_ow)
+                embed.add_field(name=TEXTS["channel_perm_new_field"], value=perm_lines, inline=False)
+            elif action_key == "deleted":
+                # Overwrite supprimé : afficher l'ancienne version
+                perm_lines = self._format_perms(old_ow)
+                embed.add_field(name=TEXTS["channel_perm_old_field"], value=perm_lines, inline=False)
+            else:
+                # Update : comparer old/new et n'afficher QUE les permissions modifiées
+                old_lines, new_lines = self._format_perms_diff(old_ow, new_ow)
+                if old_lines:
+                    embed.add_field(name=TEXTS["channel_perm_old_field"], value=old_lines, inline=False)
+                if new_lines:
+                    embed.add_field(name=TEXTS["channel_perm_new_field"], value=new_lines, inline=False)
+
+            embed.set_footer(text=self._footer(log_type, member.id))
+            await log_channel.send(embed=embed)
+
+    def _perm_label_fr(self, perm_name) -> str:
+        """Retourne le label français d'une permission."""
+        return PERMISSION_LABELS_FR.get(perm_name, perm_name.replace('_', ' ').title())
+
+    def _perm_emoji(self, val) -> str:
+        """Retourne l'emoji correspondant à l'état d'une permission."""
+        if val is True:
+            return CUSTOM_EMOJIS["allow"]
+        elif val is False:
+            return CUSTOM_EMOJIS["deny"]
+        return CUSTOM_EMOJIS["neutral"]
+
+    def _format_perms(self, overwrite) -> str:
+        """Formate un PermissionOverwrite en liste lisible avec emojis allow/deny (FR)."""
+        if overwrite is None:
+            return TEXTS["none"]
+        lines = []
+        for perm_name in discord.PermissionOverwrite.VALID_NAMES:
+            val = getattr(overwrite, perm_name, None)
+            if val is True:
+                lines.append(f'{self._perm_emoji(val)} **{self._perm_label_fr(perm_name)}**')
+            elif val is False:
+                lines.append(f'{self._perm_emoji(val)} **{self._perm_label_fr(perm_name)}**')
+        return "\n".join(lines) if lines else TEXTS["none"]
+
+    def _format_perms_diff(self, old_ow, new_ow) -> tuple:
+        """Compare deux PermissionOverwrite et retourne (lignes_old, lignes_new).
+
+        N'inclut QUE les permissions dont la valeur a changé entre old et new.
+        """
+        old_lines = []
+        new_lines = []
+        for perm_name in discord.PermissionOverwrite.VALID_NAMES:
+            old_val = getattr(old_ow, perm_name, None) if old_ow else None
+            new_val = getattr(new_ow, perm_name, None) if new_ow else None
+            if old_val != new_val:
+                old_lines.append(f'{self._perm_emoji(old_val)} **{self._perm_label_fr(perm_name)}**')
+                new_lines.append(f'{self._perm_emoji(new_val)} **{self._perm_label_fr(perm_name)}**')
+        return (
+            "\n".join(old_lines) if old_lines else TEXTS["none"],
+            "\n".join(new_lines) if new_lines else TEXTS["none"],
+        )
 
     # --- LOGS INVITATIONS ---
 
@@ -1576,6 +1835,179 @@ class Logs(commands.Cog):
             embed.set_footer(text=self._footer_custom("invite_delete", "Code", invite.code))
 
         await channel.send(embed=embed)
+
+    # --- LOGS WEBHOOKS ---
+
+    @commands.Cog.listener()
+    async def on_webhooks_update(self, channel):
+        """Se déclenche quand un webhook est créé/modifié/supprimé dans un channel.
+
+        L'événement gateway WEBHOOKS_UPDATE ne fournit que guild_id + channel_id.
+        On croise avec l'audit log pour déterminer l'action et le webhook ciblé.
+        """
+        if not channel.guild:
+            return
+
+        log_channel = self._get_log_channel("channel")
+        if not log_channel:
+            return
+
+        await asyncio.sleep(AUDIT_LOG_DELAY_DEFAULT)
+
+        # Chercher l'entry audit log webhook la plus récente sur ce channel
+        webhook_entry = None
+        webhook_action = None
+        try:
+            async for entry in channel.guild.audit_logs(limit=30):
+                if entry.action not in (
+                    discord.AuditLogAction.webhook_create,
+                    discord.AuditLogAction.webhook_update,
+                    discord.AuditLogAction.webhook_delete
+                ):
+                    continue
+                # Filtrer par fraîcheur (< 120s)
+                if (datetime.now(timezone.utc) - entry.created_at).total_seconds() >= 120:
+                    continue
+                # Vérifier que l'entry concerne bien ce channel
+                target = entry.target
+                target_channel_id = getattr(target, 'channel_id', None)
+                if target_channel_id is not None and target_channel_id != channel.id:
+                    continue
+                webhook_entry = entry
+                webhook_action = entry.action
+                break
+        except (discord.Forbidden, discord.HTTPException, AttributeError):
+            pass
+
+        if not webhook_entry:
+            return
+
+        moderator = webhook_entry.user
+        member = moderator or channel.guild.me
+        target = webhook_entry.target
+        webhook_name = getattr(target, 'name', None) or TEXTS["unknown"]
+
+        # Déterminer le type d'action
+        if webhook_action == discord.AuditLogAction.webhook_create:
+            color = WEBHOOK_COLORS["created"]
+            emoji = CUSTOM_EMOJIS["webhook_created"]
+            title = TEXTS["webhook_created_title"]
+            desc_template = TEXTS["webhook_created_desc"]
+            log_type = "webhook_create"
+        elif webhook_action == discord.AuditLogAction.webhook_delete:
+            color = WEBHOOK_COLORS["deleted"]
+            emoji = CUSTOM_EMOJIS["webhook_deleted"]
+            title = TEXTS["webhook_deleted_title"]
+            desc_template = TEXTS["webhook_deleted_desc"]
+            log_type = "webhook_delete"
+        else:  # webhook_update
+            before = webhook_entry.before
+            after = webhook_entry.after
+            # Discord ne peuple before/after qu'avec les attributs modifiés.
+            channel_changed = hasattr(after, 'channel')
+            name_changed = hasattr(after, 'name')
+            avatar_changed = hasattr(after, 'avatar')
+            old_avatar = getattr(before, 'avatar', None)
+            new_avatar = getattr(after, 'avatar', None)
+
+            # Cas spécial : changement d'avatar uniquement (log dédié)
+            if avatar_changed and not name_changed and not channel_changed:
+                emoji = CUSTOM_EMOJIS["webhook_updated"]
+                if new_avatar is None:
+                    # Avatar supprimé/retiré
+                    color = WEBHOOK_COLORS["deleted"]
+                    title = TEXTS["webhook_avatar_removed_title"]
+                    desc_template = TEXTS["webhook_avatar_removed_desc"]
+                    log_type = "webhook_avatar_removed"
+                elif old_avatar is None:
+                    # Avatar ajouté
+                    color = WEBHOOK_COLORS["created"]
+                    title = TEXTS["webhook_avatar_added_title"]
+                    desc_template = TEXTS["webhook_avatar_added_desc"]
+                    log_type = "webhook_avatar_added"
+                else:
+                    # Avatar modifié
+                    color = WEBHOOK_COLORS["edited"]
+                    title = TEXTS["webhook_avatar_updated_title"]
+                    desc_template = TEXTS["webhook_avatar_updated_desc"]
+                    log_type = "webhook_avatar_updated"
+            elif channel_changed:
+                # Déplacement de webhook
+                color = WEBHOOK_COLORS["edited"]
+                emoji = CUSTOM_EMOJIS["webhook_edited"]
+                title = TEXTS["webhook_updated_title"]
+                desc_template = TEXTS["webhook_moved_desc"]
+                log_type = "webhook_update"
+            else:
+                # Modification classique (nom, etc.)
+                color = WEBHOOK_COLORS["edited"]
+                emoji = CUSTOM_EMOJIS["webhook_edited"]
+                title = TEXTS["webhook_updated_title"]
+                desc_template = TEXTS["webhook_updated_desc"]
+                log_type = "webhook_update"
+
+        embed = discord.Embed(color=color)
+        embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
+        embed.description = f'{emoji} **{title}**\n\n{desc_template.format(name=webhook_name)}'
+
+        # Cas spécial : changement d'avatar uniquement
+        if log_type.startswith("webhook_avatar"):
+            # Avatar ajouté/modifié : afficher le nouvel avatar en thumbnail
+            if new_avatar is not None:
+                # new_avatar peut être un hash (string) ou un Asset
+                avatar_url = str(new_avatar) if not hasattr(new_avatar, 'url') else new_avatar.url
+                # Si c'est un hash, construire l'URL CDN
+                if avatar_url and not avatar_url.startswith('http'):
+                    ext = 'gif' if avatar_url.startswith('a_') else 'png'
+                    avatar_url = f"https://cdn.discordapp.com/icons/{channel.guild.id}/{avatar_url}.{ext}?size=128"
+                if avatar_url:
+                    embed.set_thumbnail(url=avatar_url)
+            else:
+                # Avatar supprimé : afficher l'ancien avatar
+                if old_avatar is not None:
+                    avatar_url = str(old_avatar) if not hasattr(old_avatar, 'url') else old_avatar.url
+                    if avatar_url and not avatar_url.startswith('http'):
+                        ext = 'gif' if avatar_url.startswith('a_') else 'png'
+                        avatar_url = f"https://cdn.discordapp.com/icons/{channel.guild.id}/{avatar_url}.{ext}?size=128"
+                    if avatar_url:
+                        embed.set_thumbnail(url=avatar_url)
+        elif webhook_action == discord.AuditLogAction.webhook_update:
+            # Modification classique : afficher nom et channel si modifiés
+            if name_changed:
+                old_name = getattr(before, 'name', None)
+                new_name = getattr(after, 'name', None)
+                embed.add_field(
+                    name=TEXTS["webhook_name_field"],
+                    value=f"`{old_name or TEXTS['none']}` **-->** `{new_name}`",
+                    inline=False
+                )
+
+            if channel_changed:
+                old_ch = getattr(before, 'channel', None)
+                new_ch = getattr(after, 'channel', None)
+                old_ch_display = old_ch.mention if old_ch else f"`{TEXTS['none']}`"
+                new_ch_display = new_ch.mention if new_ch else f"`{TEXTS['none']}`"
+                embed.add_field(
+                    name=TEXTS["webhook_channel_field"],
+                    value=f"{old_ch_display} **-->** {new_ch_display}",
+                    inline=False
+                )
+            else:
+                embed.add_field(name=TEXTS["webhook_channel_field"], value=channel.mention, inline=False)
+        else:
+            # Création / Suppression : afficher le channel où l'action a eu lieu
+            embed.add_field(name=TEXTS["webhook_channel_field"], value=channel.mention, inline=False)
+
+        embed.add_field(name=TEXTS["webhook_by_field"], value=member.mention, inline=False)
+
+        # Footer : utiliser l'ID du webhook si dispo, sinon l'ID du modérateur
+        webhook_id = getattr(target, 'id', None)
+        if webhook_id:
+            embed.set_footer(text=self._footer(log_type, member.id))
+        else:
+            embed.set_footer(text=self._footer(log_type, member.id))
+
+        await log_channel.send(embed=embed)
 
     # --- LOGS EMOJIS ---
 
