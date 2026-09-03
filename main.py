@@ -13,7 +13,8 @@ DEFAULT_TOKEN_ERROR = "❌ Token manquant dans le fichier .env"
 COGS_EXTENSIONS: List[str] = [
     "cogs.base",
     "cogs.moderation",
-    "cogs.logs"
+    "cogs.logs",
+    "cogs.giveaway"
 ]
 
 # --- CONFIGURATION ---
@@ -27,7 +28,6 @@ def configure_intents() -> discord.Intents:
     intents.members = True
     intents.message_content = True
     intents.voice_states = True
-    intents.presences = True
     intents.guilds = True
     intents.messages = True
     intents.reactions = True
@@ -47,6 +47,23 @@ def create_bot() -> commands.Bot:
         print(f'📌 Préfixe : {BOT_PREFIX}')
         print('----------------------')
         await setup_bot_activity(bot)
+
+    # Handler d'erreurs global (commandes préfixe) : informe l'utilisateur au lieu d'un silence total
+    @bot.event
+    async def on_command_error(ctx, error):
+        if isinstance(error, commands.CommandNotFound):
+            return  # Ignorer les commandes inconnues (évite le spam)
+        if isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send(f"❌ Argument manquant : `{error.param.name}`", ephemeral=True)
+            return
+        if isinstance(error, commands.BadArgument):
+            await ctx.send("❌ Argument invalide. Vérifie le format (mention, nombre...).", ephemeral=True)
+            return
+        if isinstance(error, commands.CommandInvokeError):
+            print(f"❌ Erreur commande '{ctx.command.name}' : {error.original}")
+            await ctx.send("❌ Une erreur est survenue lors de l'exécution de la commande.", ephemeral=True)
+            return
+        print(f"❌ Erreur commande : {error}")
 
     return bot
 

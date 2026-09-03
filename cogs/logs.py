@@ -13,10 +13,12 @@ from settings import (
     LOG_CHANNELS, SANCTION_COLORS, VOICE_COLORS, STAGE_COLORS,
     MEMBER_COLORS, MESSAGE_COLORS, THREAD_COLORS, INVITE_COLORS,
     EMOJI_COLORS, SOUNDBOARD_COLORS, STICKER_COLORS, EVENT_COLORS,
-    SERVER_COLORS, CHANNEL_COLORS, WEBHOOK_COLORS, DEFAULT_COLOR,
+    SERVER_COLORS, CHANNEL_COLORS, WEBHOOK_COLORS, ROLE_COLORS, DEFAULT_COLOR,
     AUDIT_LOG_LIMIT, CONTENT_MAX_LENGTH, MEMBERS_FILE, DATA_DIR, truncate_text,
     AUDIT_LOG_DELAY_SHORT, AUDIT_LOG_DELAY_DEFAULT, AUDIT_LOG_DELAY_LONG, AUDIT_LOG_DELAY_SLOW,
-    LOG_TYPE_IDS, PERMISSION_LABELS_FR
+    LOG_TYPE_IDS, PERMISSION_LABELS_FR, DANGEROUS_PERMISSIONS,
+    MAX_ATTACHMENT_CACHE_SIZE, ATTACHMENT_CACHE_TTL, MAX_ATTACHMENT_FILE_SIZE,
+    GIVEAWAY_COLOR
 )
 
 # --- CONSTANTES LOCALES (non configurables) ---
@@ -197,13 +199,22 @@ def get_channel_log_type_str(channel) -> str:
 def get_channel_log_title(channel, action: str) -> str:
     """Retourne le titre du log selon le type de channel et l'action.
 
-    Pour les catégories, on renvoie "CATÉGORIE CRÉÉE/SUPPRIMÉE" (sans préfixe CHANNEL).
-    Pour les autres types : "CHANNEL {TYPE} CRÉÉ/SUPPRIMÉ".
+    Pour les catégories, on renvoie "CATÉGORIE CRÉÉE/MODIFIÉE/SUPPRIMÉE" (sans préfixe CHANNEL).
+    Pour les autres types : "CHANNEL {TYPE} CRÉÉ/MODIFIÉ/SUPPRIMÉ".
     """
     if isinstance(channel, discord.CategoryChannel):
-        return TEXTS["category_created_title"] if action == "created" else TEXTS["category_deleted_title"]
+        category_titles = {
+            "created": TEXTS["category_created_title"],
+            "deleted": TEXTS["category_deleted_title"],
+            "edited": TEXTS["category_edited_title"],
+        }
+        return category_titles.get(action, TEXTS["category_edited_title"])
     type_str = get_channel_log_type_str(channel)
-    return TEXTS["channel_created_title"].format(type=type_str) if action == "created" else TEXTS["channel_deleted_title"].format(type=type_str)
+    if action == "created":
+        return TEXTS["channel_created_title"].format(type=type_str)
+    if action == "deleted":
+        return TEXTS["channel_deleted_title"].format(type=type_str)
+    return TEXTS["channel_edited_title"].format(type=type_str)
 
 
 def get_event_location_str(event):
@@ -224,6 +235,86 @@ def _log_id_for(log_type: str) -> str:
     """Retourne le logID formaté pour un type de log donné (ex: 'ban' -> '#L1')."""
     num = LOG_TYPE_IDS.get(log_type, 0)
     return f"#L{num:03d}" if num else "#L000"
+
+
+def _rgb_to_hsv(r: int, g: int, b: int):
+    """Convertit RGB (0-255) vers HSV (H: 0-360, S: 0-1, V: 0-1)."""
+    r, g, b = r / 255, g / 255, b / 255
+    mx, mn = max(r, g, b), min(r, g, b)
+    d = mx - mn
+    v = mx
+    s = d / mx if mx > 0 else 0
+    if d == 0:
+        h = 0
+    elif mx == r:
+        h = ((g - b) / d) % 6
+    elif mx == g:
+        h = (b - r) / d + 2
+    else:
+        h = (r - g) / d + 4
+    return h * 60, s, v
+
+
+def _color_name_fr(color_value: int) -> str:
+    """Retourne le nom français d'une couleur à partir de sa valeur hex (0xRRGGBB).
+
+    Utilise la teinte HSV (perception humaine) pour identifier la couleur dominante.
+    Retourne 'Aucune' si value == 0 (couleur par défaut de Discord = gris).
+    """
+    if not color_value:
+        return TEXTS["none"]
+
+    r, g, b = (color_value >> 16) & 0xFF, (color_value >> 8) & 0xFF, color_value & 0xFF
+    h, s, v = _rgb_to_hsv(r, g, b)
+
+    # Cas spéciaux : couleurs peu saturées (gris/noir/blanc)
+    # Quand S est très bas, la teinte H n'a pas de sens → on ignore H
+    if s < 0.15:
+        if v < 0.15:
+            return "Noir"
+        if v > 0.9:
+            return "Blanc"
+        if v > 0.7:
+            return "Gris clair"
+        return "Gris"
+
+    # Rose pâle : faible saturation mais teinte rouge/rose (H n'est pertinent qu'avec S suffisant)
+    if s < 0.4 and (h < 20 or h >= 315) and v > 0.7:
+        return "Rose"
+
+    # Classification par teinte (HSV hue)
+    # Rouge : 0-15 et 345-360
+    if h < 15 or h >= 345:
+        return "Rouge"
+    # Rose : 315-345
+    if h >= 315:
+        return "Rose"
+    # Orange : 15-45
+    if h < 45:
+        return "Orange"
+    # Or : 45-55 (plus doré, légèrement désaturé)
+    if h < 55:
+        return "Or"
+    # Jaune : 55-70
+    if h < 70:
+        return "Jaune"
+    # Vert : 70-165
+    if h < 165:
+        return "Vert"
+    # Turquoise : 165-200
+    if h < 200:
+        return "Turquoise"
+    # Blurple : 225-245 (bleu Discord désaturé)
+    if 225 <= h < 245 and s < 0.75:
+        return "Blurple"
+    # Bleu : 200-265
+    if h < 265:
+        return "Bleu"
+    # Magenta : 265-315 avec valeur élevée
+    if h < 315 and v > 0.8:
+        return "Magenta"
+    # Violet : 265-315 avec valeur plus faible
+    return "Violet"
 
 
 # Mapping des action_type de sanction -> clé LOG_TYPE_IDS
@@ -258,6 +349,29 @@ STAGE_LOG_TYPES = {
 }
 
 
+# --- PERMISSIONS CANONIQUES (dédoublonnées) ---
+# discord.Permissions.VALID_FLAGS contient des alias partageant le même bit.
+# On garde le nom correspondant à l'interface Discord (un seul par bit réel).
+_PERMISSION_CANONICAL = {
+    "view_channel",             # alias read_messages exclu
+    "use_external_emojis",      # alias external_emojis exclu
+    "manage_roles",             # alias manage_permissions exclu
+    "manage_expressions",       # alias manage_emojis / manage_emojis_and_stickers exclus
+    "use_external_stickers",    # alias external_stickers exclu
+    "create_polls",             # alias send_polls exclu
+}
+# Noms de permissions de rôle à EXCLURE (alias redondants)
+_PERMISSION_EXCLUDED = {
+    "read_messages",
+    "external_emojis",
+    "manage_permissions",
+    "manage_emojis",
+    "manage_emojis_and_stickers",
+    "external_stickers",
+    "send_polls",
+}
+
+
 # --- CLASSE PRINCIPALE ---
 
 class Logs(commands.Cog):
@@ -275,6 +389,8 @@ class Logs(commands.Cog):
         self.vc_status_mod_cache = {}  # Cache modérateur statut vocal (channel_id -> {moderator, time})
         self._banner_cache = {}  # Cache bannière serveur (guild_id -> bytes)
         self._booster_cache = {}  # Cache boost récent (guild_id -> member) pour on_guild_update
+        self._attachment_cache = {}  # message_id -> [(filename, bytes, content_type)] sauvegarde proactive des fichiers
+        self._attachment_cache_order = []  # FIFO pour limiter la taille du cache
 
         # Intercepter le gateway event VOICE_CHANNEL_STATUS_UPDATE (non supporté par discord.py)
         self.bot._connection.parsers['VOICE_CHANNEL_STATUS_UPDATE'] = lambda data: asyncio.ensure_future(
@@ -307,6 +423,47 @@ class Logs(commands.Cog):
 
         channel = self.bot.get_channel(channel_id)
         return channel
+
+    def _cache_attachment_cleanup(self):
+        """Nettoie le cache des pièces jointes (FIFO + TTL)."""
+        if not self._attachment_cache:
+            return
+        now = datetime.now(timezone.utc).timestamp()
+        # Supprimer les entrées expirées (TTL)
+        expired = [mid for mid, data in self._attachment_cache.items() if now - data['time'] > ATTACHMENT_CACHE_TTL]
+        for mid in expired:
+            self._attachment_cache.pop(mid, None)
+            if mid in self._attachment_cache_order:
+                self._attachment_cache_order.remove(mid)
+        # Si toujours trop grand, supprimer les plus anciens (FIFO)
+        while len(self._attachment_cache) > MAX_ATTACHMENT_CACHE_SIZE and self._attachment_cache_order:
+            oldest = self._attachment_cache_order.pop(0)
+            self._attachment_cache.pop(oldest, None)
+
+    async def _cache_attachments(self, message):
+        """Sauvegarde proactivement les pièces jointes d'un message dans le cache.
+
+        Permet de restaurer les fichiers après suppression (individuelle ou bulk).
+        Ignore les fichiers trop volumineux (> MAX_ATTACHMENT_FILE_SIZE).
+        """
+        if not message.attachments:
+            return
+        files_data = []
+        for att in message.attachments:
+            if att.size and att.size > MAX_ATTACHMENT_FILE_SIZE:
+                continue  # Trop gros, on ignore
+            try:
+                file_bytes = await att.read()
+                files_data.append((att.filename, file_bytes, att.content_type))
+            except Exception:
+                continue
+        if files_data:
+            self._attachment_cache[message.id] = {
+                'files': files_data,
+                'time': datetime.now(timezone.utc).timestamp()
+            }
+            self._attachment_cache_order.append(message.id)
+            self._cache_attachment_cleanup()
 
     async def _get_moderator_from_audit_log(self, guild, target_id, action_types, time_window: int = 120, limit: int = AUDIT_LOG_LIMIT):
         """Recherche un modérateur dans les audit logs."""
@@ -358,7 +515,7 @@ class Logs(commands.Cog):
             embed.description = f"{emoji} **{action_type.upper()}**"
         embed.add_field(name=TEXTS["user_field"], value=f"<@{target.id}>", inline=True)
         embed.add_field(name=TEXTS["moderator_field"], value=f"<@{moderator.id}>" if moderator else TEXTS["unknown_moderator"], inline=True)
-        embed.add_field(name=TEXTS["reason_field"], value=reason or TEXTS["no_reason"], inline=False)
+        embed.add_field(name=TEXTS["reason_field"], value=truncate_text(reason or TEXTS["no_reason"], 1000), inline=False)
 
         if action_type == "Mute" and end_time:
             ts_end = int(end_time.timestamp())
@@ -470,6 +627,62 @@ class Logs(commands.Cog):
 
         return embed
 
+    # --- LOGS COMMANDES MODÉRATION ---
+
+    async def log_command_use(self, command_name, user, prefix="/"):
+        """Log l'utilisation d'une commande de modération.
+
+        À appeler APRÈS le check de permission (donc pas si accès refusé),
+        mais avant/après l'action elle-même (même en cas d'erreur).
+        Le prefix affiché est "+" (préfixe) ou "/" (slash) selon le mode utilisé.
+        """
+        channel = self._get_log_channel("command")
+        if not channel:
+            return
+
+        embed = discord.Embed(color=discord.Color(int("FFD700", 16)))  # Jaune
+        embed.set_author(name=user.display_name, icon_url=user.display_avatar.url)
+        embed.description = f'{CUSTOM_EMOJIS["command_used"]} **{TEXTS["command_used_title"]}**\n{TEXTS["command_used_desc"]}'
+        embed.add_field(name=TEXTS["command_name_field"], value=f'`{prefix}{command_name}`', inline=False)
+        embed.add_field(name=TEXTS["member_by"], value=user.mention, inline=False)
+        embed.set_footer(text=self._footer("command_used", user.id))
+        await channel.send(embed=embed)
+
+    # --- LOGS GIVEAWAY ---
+
+    def _build_giveaway_embed(self, giveaway_id, name, description, end_time, creator, participants_count, winners):
+        """Construit l'embed vivant d'un giveaway (création, participations, gagnants)."""
+        ts = int(end_time.timestamp())
+        embed = discord.Embed(color=GIVEAWAY_COLOR)
+        embed.set_author(name=creator.display_name, icon_url=creator.display_avatar.url)
+        embed.description = f'{CUSTOM_EMOJIS["giveaway"]} **{name}**\n{description or ""}'
+        embed.add_field(name=TEXTS["giveaway_id_field"], value=f"`{giveaway_id}`", inline=False)
+        embed.add_field(name=TEXTS["giveaway_ends_log_field"], value=f"<t:{ts}:R> - <t:{ts}:F>", inline=False)
+        embed.add_field(name=TEXTS["giveaway_created_by"], value=creator.mention, inline=False)
+        embed.add_field(name=TEXTS["giveaway_participants"], value=f"`{participants_count}`", inline=False)
+        winners_str = " ".join(w.mention for w in winners) if winners else f"`{TEXTS['giveaway_no_winners']}`"
+        embed.add_field(name=TEXTS["giveaway_winners"], value=winners_str, inline=False)
+        embed.set_footer(text=self._footer("giveaway", creator.id))
+        return embed
+
+    async def send_giveaway_log(self, giveaway_id, name, description, end_time, creator):
+        """Crée le log d'un giveaway (embed vivant, 0 participation, aucun gagnant).
+
+        Retourne le message du log pour édition future (participations/gagnants).
+        """
+        log_channel = self._get_log_channel("giveaway")
+        if not log_channel:
+            return None
+        embed = self._build_giveaway_embed(giveaway_id, name, description, end_time, creator, 0, [])
+        return await log_channel.send(embed=embed)
+
+    async def update_giveaway_log(self, log_message, giveaway_id, name, description, end_time, creator, participants_count, winners):
+        """Met à jour le log vivant d'un giveaway (compteur de participations / gagnants)."""
+        if log_message is None:
+            return
+        embed = self._build_giveaway_embed(giveaway_id, name, description, end_time, creator, participants_count, winners)
+        await log_message.edit(embed=embed)
+
     # --- LOGS SANCTIONS ---
 
     async def send_log(self, interaction, action_type, target, moderator, reason, duration_str=None, end_time=None):
@@ -519,7 +732,7 @@ class Logs(commands.Cog):
                     members_data = json.load(f)
             else:
                 os.makedirs(DATA_DIR, exist_ok=True)
-                with open(members_file, 'w') as f:
+                with open(members_file, 'w', encoding='utf-8') as f:
                     json.dump({}, f)
 
             uid = str(member.id)
@@ -530,8 +743,9 @@ class Logs(commands.Cog):
                 "last_join": datetime.now(timezone.utc).isoformat()
             }
             with open(members_file, 'w', encoding='utf-8') as f:
-                json.dump(members_data, f, indent=4)
-        except (IOError, json.JSONDecodeError):
+                json.dump(members_data, f, indent=4, ensure_ascii=False)
+        except (IOError, ValueError):
+            # UnicodeEncodeError (pseudos non-cp1252) hérite de ValueError
             pass
 
         embed = discord.Embed(color=MEMBER_COLORS["join"])
@@ -664,19 +878,29 @@ class Logs(commands.Cog):
                 after.guild, after.id, [discord.AuditLogAction.member_role_update]
             )
 
+            # Si aucun modérateur trouvé via l'audit log, c'est probablement
+            # l'utilisateur lui-même via un sélecteur de rôle (self-assign).
+            by_member = mod or after
+
             if added:
-                embed = discord.Embed(title=f'{CUSTOM_EMOJIS["member_edited"]} **{TEXTS["member_role_add_title"]}**', color=MEMBER_COLORS["role_add"])
+                emoji = CUSTOM_EMOJIS["role_added"]
+                desc_key = "member_role_add_one_desc" if len(added) == 1 else "member_role_add_many_desc"
+                embed = discord.Embed(color=MEMBER_COLORS["role_add"])
                 embed.set_author(name=after.display_name, icon_url=after.display_avatar.url)
-                embed.add_field(name=TEXTS["member_role_field"], value=", ".join([r.mention for r in added]), inline=False)
-                embed.add_field(name=TEXTS["member_by"], value=mod.mention if mod else TEXTS["unknown"], inline=True)
+                embed.description = f'{emoji} **{TEXTS["member_role_add_title"]}**\n{TEXTS[desc_key].format(user=after.mention)}'
+                embed.add_field(name=TEXTS["member_role_field"], value=truncate_text(", ".join([r.mention for r in added]), 1000), inline=False)
+                embed.add_field(name=TEXTS["member_by"], value=by_member.mention, inline=True)
                 embed.set_footer(text=self._footer("member_role_add", after.id))
                 await channel.send(embed=embed)
 
             if removed:
-                embed = discord.Embed(title=f'{CUSTOM_EMOJIS["member_edited"]} **{TEXTS["member_role_remove_title"]}**', color=MEMBER_COLORS["role_remove"])
+                emoji = CUSTOM_EMOJIS["role_removed"]
+                desc_key = "member_role_remove_one_desc" if len(removed) == 1 else "member_role_remove_many_desc"
+                embed = discord.Embed(color=MEMBER_COLORS["role_remove"])
                 embed.set_author(name=after.display_name, icon_url=after.display_avatar.url)
-                embed.add_field(name=TEXTS["member_role_field"], value=", ".join([r.mention for r in removed]), inline=False)
-                embed.add_field(name=TEXTS["member_by"], value=mod.mention if mod else TEXTS["unknown"], inline=True)
+                embed.description = f'{emoji} **{TEXTS["member_role_remove_title"]}**\n{TEXTS[desc_key].format(user=after.mention)}'
+                embed.add_field(name=TEXTS["member_role_field"], value=truncate_text(", ".join([r.mention for r in removed]), 1000), inline=False)
+                embed.add_field(name=TEXTS["member_by"], value=by_member.mention, inline=True)
                 embed.set_footer(text=self._footer("member_role_remove", after.id))
                 await channel.send(embed=embed)
 
@@ -722,17 +946,30 @@ class Logs(commands.Cog):
 
         if message.poll:
             self.poll_cache[message.id] = message
+            # Borner le cache (FIFO : supprimer les plus anciens au-delà de 100)
+            while len(self.poll_cache) > 100:
+                oldest = next(iter(self.poll_cache))
+                del self.poll_cache[oldest]
+
+        # Sauvegarde proactive des pièces jointes (pour restauration après suppression)
+        if message.attachments:
+            await self._cache_attachments(message)
 
     @commands.Cog.listener()
     async def on_bulk_message_delete(self, messages):
-        """Se déclenche lors d'un /clear (purge)."""
+        """Se déclenche lors d'un /clear (purge) ou d'un ban avec suppression de messages."""
         channel = self._get_log_channel("message")
-        if not channel:
-            return
+        file_channel = self._get_log_channel("file")
 
         for message in messages:
             if not message.content and not message.attachments:
                 continue
+
+            discord_file = None  # fichier à attacher (si récupéré du cache)
+            # Récupérer les fichiers en cache (les URLs sont mortes après bulk delete)
+            cached = self._attachment_cache.pop(message.id, None) if message.attachments else None
+            if cached and message.id in self._attachment_cache_order:
+                self._attachment_cache_order.remove(message.id)
 
             embed = discord.Embed(title=f'{CUSTOM_EMOJIS["message_deleted"]} **{TEXTS["message_bulk_delete_title"]}**', color=MESSAGE_COLORS["bulk_delete"])
             embed.set_author(name=message.author.display_name, icon_url=message.author.display_avatar.url)
@@ -740,7 +977,15 @@ class Logs(commands.Cog):
             if message.attachments:
                 att = message.attachments[0]
                 if att.content_type and att.content_type.startswith('image/'):
-                    embed.set_image(url=att.url)
+                    # Image : essayer l'URL, sinon le cache
+                    if cached:
+                        for fname, fbytes, _ in cached['files']:
+                            if fname == att.filename:
+                                discord_file = discord.File(io.BytesIO(fbytes), filename=att.filename)
+                                embed.set_image(url=f"attachment://{att.filename}")
+                                break
+                    else:
+                        embed.set_image(url=att.url)
                     embed.add_field(name=TEXTS["message_file"], value=f"{TEXTS['message_image']} {att.filename}", inline=False)
                 else:
                     embed.add_field(name=TEXTS["message_file"], value=f"{TEXTS['message_attachment']} {att.filename}", inline=False)
@@ -752,7 +997,33 @@ class Logs(commands.Cog):
             embed.add_field(name=TEXTS["message_channel_field"], value=message.channel.mention, inline=True)
             embed.add_field(name=TEXTS["method_field"], value=TEXTS["message_clear_command"], inline=False)
             embed.set_footer(text=self._footer("bulk_message_delete", message.author.id))
-            await channel.send(embed=embed)
+
+            # Envoyer le log message (avec le fichier attaché si récupéré du cache)
+            if channel:
+                if discord_file:
+                    await channel.send(file=discord_file, embed=embed)
+                else:
+                    await channel.send(embed=embed)
+
+            # Log dédié dans le channel fichier (comme on_message_delete)
+            if message.attachments and file_channel and cached:
+                for att in message.attachments:
+                    for fname, fbytes, ftype in cached['files']:
+                        if fname != att.filename:
+                            continue
+                        is_image = ftype and ftype.startswith('image/')
+                        dfile = discord.File(io.BytesIO(fbytes), filename=att.filename)
+
+                        fembed = discord.Embed(color=MESSAGE_COLORS["file_deleted"])
+                        fembed.set_author(name=message.author.display_name, icon_url=message.author.display_avatar.url)
+                        fembed.description = f'{CUSTOM_EMOJIS["attachment_deleted"]} **{TEXTS["file_deleted_title"]}**'
+                        if is_image:
+                            fembed.set_image(url=f"attachment://{att.filename}")
+                        fembed.add_field(name=TEXTS["file_deleted_name_field"], value=att.filename, inline=False)
+                        fembed.add_field(name=TEXTS["file_deleted_from_field"], value=message.author.mention, inline=False)
+                        fembed.add_field(name=TEXTS["file_deleted_channel_field"], value=message.channel.mention, inline=False)
+                        fembed.set_footer(text=self._footer("file_deleted", message.author.id))
+                        await file_channel.send(file=dfile, embed=fembed)
 
     @commands.Cog.listener()
     async def on_message_delete(self, message):
@@ -862,16 +1133,53 @@ class Logs(commands.Cog):
         if message.attachments:
             file_channel = self._get_log_channel("file")
             if file_channel:
+                # Récupérer les fichiers en cache (au cas où l'URL serait déjà morte)
+                cached = self._attachment_cache.pop(message.id, None)
+                if cached and message.id in self._attachment_cache_order:
+                    self._attachment_cache_order.remove(message.id)
+
                 for att in message.attachments:
-                    try:
-                        file_bytes = await att.read()
-                        discord_file = discord.File(io.BytesIO(file_bytes), filename=att.filename)
-                    except Exception:
-                        discord_file = None
+                    is_image = att.content_type and att.content_type.startswith('image/')
+                    discord_file = None
+                    image_bytes = None  # bytes si on doit uploader l'image via attachment
+
+                    if not is_image:
+                        # Pour les autres fichiers : récupérer le contenu (URL ou cache)
+                        try:
+                            file_bytes = await att.read()
+                        except Exception:
+                            # URL morte, on cherche dans le cache
+                            file_bytes = None
+                            if cached:
+                                for fname, fbytes, _ in cached['files']:
+                                    if fname == att.filename:
+                                        file_bytes = fbytes
+                                        break
+                        if file_bytes:
+                            discord_file = discord.File(io.BytesIO(file_bytes), filename=att.filename)
+                    else:
+                        # Pour les images : récupérer les bytes pour set_image via upload
+                        try:
+                            image_bytes = await att.read()
+                        except Exception:
+                            if cached:
+                                for fname, fbytes, _ in cached['files']:
+                                    if fname == att.filename:
+                                        image_bytes = fbytes
+                                        break
 
                     embed = discord.Embed(color=MESSAGE_COLORS["file_deleted"])
                     embed.set_author(name=message.author.display_name, icon_url=message.author.display_avatar.url)
                     embed.description = f'{CUSTOM_EMOJIS["attachment_deleted"]} **{TEXTS["file_deleted_title"]}**'
+
+                    # Image : afficher en haut de l'embed (via attachment si URL morte)
+                    if is_image:
+                        if image_bytes:
+                            discord_file = discord.File(io.BytesIO(image_bytes), filename=att.filename)
+                            embed.set_image(url=f"attachment://{att.filename}")
+                        else:
+                            embed.set_image(url=att.url)
+
                     embed.add_field(name=TEXTS["file_deleted_name_field"], value=att.filename, inline=False)
                     embed.add_field(name=TEXTS["file_deleted_from_field"], value=message.author.mention, inline=False)
                     embed.add_field(name=TEXTS["file_deleted_channel_field"], value=message.channel.mention, inline=False)
@@ -918,6 +1226,10 @@ class Logs(commands.Cog):
             if is_pin and moderator:
                 embed.add_field(name=TEXTS["pinned_by"], value=moderator.mention, inline=True)
                 self.pin_cache[after.id] = moderator.id
+                # Borner le cache (FIFO : supprimer les plus anciens au-delà de 200)
+                while len(self.pin_cache) > 200:
+                    oldest = next(iter(self.pin_cache))
+                    del self.pin_cache[oldest]
             elif not is_pin:
                 pinner_id = self.pin_cache.pop(after.id, None)
                 if moderator and moderator.id != pinner_id:
@@ -1338,7 +1650,7 @@ class Logs(commands.Cog):
 
         embed = discord.Embed(color=THREAD_COLORS["reopened"])
         embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
-        embed.description = f'{CUSTOM_EMOJIS["thread_unlock"]} **{TEXTS["thread_reopened_title"]}**\n\n{member.mention} a `rouvert` le fil'
+        embed.description = f'{CUSTOM_EMOJIS["thread_unlock"]} **{TEXTS["thread_reopened_title"]}**\n\n{member.mention} a `rouvert` un fil'
 
         parent_channel = thread.parent
         embed.add_field(name=TEXTS["voice_channel"], value=parent_channel.mention if parent_channel else TEXTS["unknown"], inline=True)
@@ -1417,18 +1729,18 @@ class Logs(commands.Cog):
         # Verrouillage / Déverrouillage
         if before.locked != after.locked:
             if after.locked:
-                modifications.append('a `verrouillé` le fil')
+                modifications.append('a `verrouillé` un fil')
                 primary_action = "locked"
             else:
-                modifications.append('a `déverrouillé` le fil')
+                modifications.append('a `déverrouillé` un fil')
                 primary_action = "unlocked"
 
         # Fermeture / Ouverture
         if not before.archived and after.archived:
-            modifications.append('a `fermé` le fil')
+            modifications.append('a `fermé` un fil')
             primary_action = "closed"
         elif before.archived and not after.archived:
-            modifications.append('a `rouvert` le fil')
+            modifications.append('a `rouvert` un fil')
             primary_action = "reopened"
 
         if not modifications:
@@ -1559,7 +1871,7 @@ class Logs(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_channel_update(self, before, after):
-        """Se déclenche quand un channel est modifié (permissions uniquement)."""
+        """Se déclenche quand un channel est modifié (propriétés et/ou permissions)."""
         if not after.guild:
             return
 
@@ -1567,8 +1879,12 @@ class Logs(commands.Cog):
         if not log_channel:
             return
 
-        # Ne logger QUE les changements d'overwrites (les autres modifs de channel
-        # ne sont pas gérées ici pour éviter le bruit).
+        # --- 1. Changements de propriétés (nom, description, mode lent, etc.) ---
+        prop_changes = self._collect_channel_prop_changes(before, after)
+        if prop_changes:
+            await self._log_channel_props_change(before, after, prop_changes, log_channel)
+
+        # --- 2. Changements d'overwrites (permissions) ---
         if before.overwrites == after.overwrites:
             return
 
@@ -1693,6 +2009,88 @@ class Logs(commands.Cog):
             embed.set_footer(text=self._footer(log_type, member.id))
             await log_channel.send(embed=embed)
 
+    def _collect_channel_prop_changes(self, before, after) -> list:
+        """Détecte les changements de propriétés d'un channel (nom, description, etc.).
+
+        Retourne une liste de tuples (label, valeur_avant --> valeur_après).
+        Seuls les champs réellement modifiés sont inclus.
+        """
+        changes = []
+
+        # Nom (tous types de channel)
+        if before.name != after.name:
+            changes.append((TEXTS["channel_prop_name"], f"`{before.name}` **-->** `{after.name}`"))
+
+        # Description / topic (texte, forum, stage — pas sur les catégories)
+        old_topic, new_topic = before.topic or "", after.topic or ""
+        if old_topic != new_topic:
+            old_display = truncate_text(old_topic, 200) if old_topic else TEXTS["none"]
+            new_display = truncate_text(new_topic, 200) if new_topic else TEXTS["none"]
+            changes.append((TEXTS["channel_prop_topic"], f"`{old_display}` **-->** `{new_display}`"))
+
+        # Mode lent (texte, vocal, forum)
+        old_slow = getattr(before, 'slowmode_delay', 0)
+        new_slow = getattr(after, 'slowmode_delay', 0)
+        if old_slow != new_slow:
+            changes.append((TEXTS["channel_prop_slowmode"], f"`{format_slowmode(old_slow)}` **-->** `{format_slowmode(new_slow)}`"))
+
+        # Masquer après une période d'inactivité / auto-archive (texte, forum)
+        old_archive = getattr(before, 'default_auto_archive_duration', None)
+        new_archive = getattr(after, 'default_auto_archive_duration', None)
+        if old_archive is not None and new_archive is not None and old_archive != new_archive:
+            changes.append((TEXTS["channel_prop_archive"], f"`{format_archive(old_archive)}` **-->** `{format_archive(new_archive)}`"))
+
+        # Catégorie parente (déplacement du channel)
+        if before.category_id != after.category_id:
+            old_cat = before.category.mention if before.category else f"`{TEXTS['channel_no_category']}`"
+            new_cat = after.category.mention if after.category else f"`{TEXTS['channel_no_category']}`"
+            changes.append((TEXTS["channel_prop_category"], f"{old_cat} **-->** {new_cat}"))
+
+        # NSFW (texte uniquement)
+        if getattr(before, 'nsfw', False) != getattr(after, 'nsfw', False):
+            old_nsfw = TEXTS["role_yes"] if before.nsfw else TEXTS["role_no"]
+            new_nsfw = TEXTS["role_yes"] if after.nsfw else TEXTS["role_no"]
+            changes.append((TEXTS["channel_prop_nsfw"], f"`{old_nsfw}` **-->** `{new_nsfw}`"))
+
+        # Débit audio (vocal uniquement)
+        old_bitrate = getattr(before, 'bitrate', None)
+        new_bitrate = getattr(after, 'bitrate', None)
+        if old_bitrate and new_bitrate and old_bitrate != new_bitrate:
+            changes.append((TEXTS["channel_prop_bitrate"], f"`{old_bitrate // 1000} kbps` **-->** `{new_bitrate // 1000} kbps`"))
+
+        # Limite utilisateurs (vocal uniquement, 0 = illimité)
+        old_limit = getattr(before, 'user_limit', None)
+        new_limit = getattr(after, 'user_limit', None)
+        if old_limit is not None and new_limit is not None and old_limit != new_limit:
+            old_l = str(old_limit) if old_limit else TEXTS["channel_unlimited"]
+            new_l = str(new_limit) if new_limit else TEXTS["channel_unlimited"]
+            changes.append((TEXTS["channel_prop_userlimit"], f"`{old_l}` **-->** `{new_l}`"))
+
+        return changes
+
+    async def _log_channel_props_change(self, before, after, changes, log_channel):
+        """Génère un log pour les changements de propriétés d'un channel."""
+        await asyncio.sleep(AUDIT_LOG_DELAY_DEFAULT)
+        moderator = await self._get_moderator_from_audit_log(
+            after.guild, after.id, [discord.AuditLogAction.channel_update], limit=50
+        )
+        member = moderator or after.guild.me
+
+        is_category = isinstance(after, discord.CategoryChannel)
+        channel_display = f"`{after.name}`" if is_category else after.mention
+        desc_template = TEXTS["category_edited_desc"] if is_category else TEXTS["channel_edited_desc"]
+
+        embed = discord.Embed(color=CHANNEL_COLORS["edited"])
+        embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
+        embed.description = f'{CUSTOM_EMOJIS["channel_edited"]} **{get_channel_log_title(after, "edited")}**\n{desc_template.format(channel=channel_display)}'
+
+        for field_name, field_value in changes:
+            embed.add_field(name=field_name, value=field_value, inline=False)
+
+        embed.add_field(name=TEXTS["member_by"], value=member.mention, inline=False)
+        embed.set_footer(text=self._footer("channel_edit", member.id))
+        await log_channel.send(embed=embed)
+
     def _perm_label_fr(self, perm_name) -> str:
         """Retourne le label français d'une permission."""
         return PERMISSION_LABELS_FR.get(perm_name, perm_name.replace('_', ' ').title())
@@ -1706,22 +2104,24 @@ class Logs(commands.Cog):
         return CUSTOM_EMOJIS["neutral"]
 
     def _format_perms(self, overwrite) -> str:
-        """Formate un PermissionOverwrite en liste lisible avec emojis allow/deny (FR)."""
+        """Formate un PermissionOverwrite en liste lisible avec emojis allow/deny (FR).
+
+        Borné à 1000 caractères (limite Discord : 1024 par field).
+        """
         if overwrite is None:
             return TEXTS["none"]
         lines = []
         for perm_name in discord.PermissionOverwrite.VALID_NAMES:
             val = getattr(overwrite, perm_name, None)
-            if val is True:
+            if val is True or val is False:
                 lines.append(f'{self._perm_emoji(val)} **{self._perm_label_fr(perm_name)}**')
-            elif val is False:
-                lines.append(f'{self._perm_emoji(val)} **{self._perm_label_fr(perm_name)}**')
-        return "\n".join(lines) if lines else TEXTS["none"]
+        return truncate_text("\n".join(lines), 1000) if lines else TEXTS["none"]
 
     def _format_perms_diff(self, old_ow, new_ow) -> tuple:
         """Compare deux PermissionOverwrite et retourne (lignes_old, lignes_new).
 
         N'inclut QUE les permissions dont la valeur a changé entre old et new.
+        Borné à 1000 caractères par liste (limite Discord).
         """
         old_lines = []
         new_lines = []
@@ -1732,9 +2132,210 @@ class Logs(commands.Cog):
                 old_lines.append(f'{self._perm_emoji(old_val)} **{self._perm_label_fr(perm_name)}**')
                 new_lines.append(f'{self._perm_emoji(new_val)} **{self._perm_label_fr(perm_name)}**')
         return (
-            "\n".join(old_lines) if old_lines else TEXTS["none"],
-            "\n".join(new_lines) if new_lines else TEXTS["none"],
+            truncate_text("\n".join(old_lines), 1000) if old_lines else TEXTS["none"],
+            truncate_text("\n".join(new_lines), 1000) if new_lines else TEXTS["none"],
         )
+
+    # --- LOGS RÔLES SERVEUR ---
+
+    @commands.Cog.listener()
+    async def on_guild_role_create(self, role):
+        """Se déclenche quand un rôle est créé."""
+        if not role.guild:
+            return
+
+        log_channel = self._get_log_channel("roles")
+        if not log_channel:
+            return
+
+        await asyncio.sleep(AUDIT_LOG_DELAY_DEFAULT)
+        moderator = await self._get_moderator_from_audit_log(
+            role.guild, role.id, [discord.AuditLogAction.role_create], limit=50
+        )
+        member = moderator or role.guild.me
+
+        embed = discord.Embed(color=ROLE_COLORS["created"])
+        embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
+        embed.description = f'{CUSTOM_EMOJIS["role_created"]} **{TEXTS["role_created_title"]}**\n{TEXTS["role_created_desc"].format(name=role.name)}'
+        embed.add_field(name=TEXTS["role_field"], value=f"`{role.name}`", inline=False)
+        embed.add_field(name=TEXTS["member_by"], value=member.mention, inline=False)
+        embed.set_footer(text=self._footer("role_create", member.id))
+        await log_channel.send(embed=embed)
+
+    @commands.Cog.listener()
+    async def on_guild_role_delete(self, role):
+        """Se déclenche quand un rôle est supprimé."""
+        if not role.guild:
+            return
+
+        log_channel = self._get_log_channel("roles")
+        if not log_channel:
+            return
+
+        await asyncio.sleep(AUDIT_LOG_DELAY_DEFAULT)
+        moderator = await self._get_moderator_from_audit_log(
+            role.guild, role.id, [discord.AuditLogAction.role_delete], limit=50
+        )
+        member = moderator or role.guild.me
+
+        embed = discord.Embed(color=ROLE_COLORS["deleted"])
+        embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
+        embed.description = f'{CUSTOM_EMOJIS["role_deleted"]} **{TEXTS["role_deleted_title"]}**\n{TEXTS["role_deleted_desc"].format(name=role.name)}'
+        embed.add_field(name=TEXTS["role_field"], value=f"`{role.name}`", inline=False)
+        embed.add_field(name=TEXTS["member_by"], value=member.mention, inline=False)
+        embed.set_footer(text=self._footer("role_delete", member.id))
+        await log_channel.send(embed=embed)
+
+    @commands.Cog.listener()
+    async def on_guild_role_update(self, before, after):
+        """Se déclenche quand un rôle est modifié."""
+        if not after.guild:
+            return
+
+        log_channel = self._get_log_channel("roles")
+        if not log_channel:
+            return
+
+        # --- Cas spécial : changement d'icône (log dédié) ---
+        before_icon = before.icon
+        after_icon = after.icon
+        icon_changed = str(before_icon) != str(after_icon)
+        if icon_changed:
+            await self._log_role_icon_change(before, after, before_icon, after_icon, log_channel)
+
+        # --- Cas spécial : changement de permissions (log dédié) ---
+        if before.permissions != after.permissions:
+            await self._log_role_perms_change(before, after, log_channel)
+
+        # --- Autres changements (nom, couleur, hoist, mentionable) ---
+        changes = []
+
+        # Changement de nom
+        if before.name != after.name:
+            changes.append((TEXTS["role_name_field"], f"`{before.name}` **-->** `{after.name}`"))
+
+        # Changement de couleur
+        if before.color != after.color:
+            old_color = _color_name_fr(before.color.value)
+            new_color = _color_name_fr(after.color.value)
+            changes.append((TEXTS["role_color_field"], f"`{old_color}` **-->** `{new_color}`"))
+
+        # Changement hoist (affiché séparément)
+        if before.hoist != after.hoist:
+            old_hoist = TEXTS["role_yes"] if before.hoist else TEXTS["role_no"]
+            new_hoist = TEXTS["role_yes"] if after.hoist else TEXTS["role_no"]
+            changes.append((TEXTS["role_hoist_field"], f"`{old_hoist}` **-->** `{new_hoist}`"))
+
+        # Changement mentionable
+        if before.mentionable != after.mentionable:
+            old_ment = TEXTS["role_yes"] if before.mentionable else TEXTS["role_no"]
+            new_ment = TEXTS["role_yes"] if after.mentionable else TEXTS["role_no"]
+            changes.append((TEXTS["role_mentionable_field"], f"`{old_ment}` **-->** `{new_ment}`"))
+
+        if not changes:
+            return
+
+        await asyncio.sleep(AUDIT_LOG_DELAY_DEFAULT)
+        moderator = await self._get_moderator_from_audit_log(
+            after.guild, after.id, [discord.AuditLogAction.role_update], limit=50
+        )
+        member = moderator or after.guild.me
+
+        embed = discord.Embed(color=ROLE_COLORS["edited"])
+        embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
+        embed.description = f'{CUSTOM_EMOJIS["role_edited"]} **{TEXTS["role_edited_title"]}**\n{TEXTS["role_edited_desc"].format(name=after.name)}'
+
+        for field_name, field_value in changes:
+            embed.add_field(name=field_name, value=field_value, inline=False)
+
+        embed.add_field(name=TEXTS["member_by"], value=member.mention, inline=False)
+        embed.set_footer(text=self._footer("role_update", member.id))
+        await log_channel.send(embed=embed)
+
+    async def _log_role_icon_change(self, before, after, before_icon, after_icon, log_channel):
+        """Génère un log dédié pour un changement d'icône de rôle."""
+        await asyncio.sleep(AUDIT_LOG_DELAY_DEFAULT)
+        moderator = await self._get_moderator_from_audit_log(
+            after.guild, after.id, [discord.AuditLogAction.role_update], limit=50
+        )
+        member = moderator or after.guild.me
+
+        # Déterminer le type de changement
+        if after_icon is None:
+            # Icône supprimée
+            desc_template = TEXTS["role_icon_removed_desc"]
+            log_type = "role_icon_removed"
+            icon_to_show = before_icon  # afficher l'ancienne icône
+        elif before_icon is None:
+            # Icône ajoutée
+            desc_template = TEXTS["role_icon_added_desc"]
+            log_type = "role_icon_added"
+            icon_to_show = after_icon
+        else:
+            # Icône modifiée
+            desc_template = TEXTS["role_icon_updated_desc"]
+            log_type = "role_icon_updated"
+            icon_to_show = after_icon
+
+        embed = discord.Embed(color=ROLE_COLORS["edited"])
+        embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
+        embed.description = f'{CUSTOM_EMOJIS["role_edited"]} **{TEXTS["role_icon_title"]}**\n{desc_template.format(role=after.mention)}'
+
+        # Afficher l'icône concernée en thumbnail
+        icon_url = str(icon_to_show) if icon_to_show else None
+        if icon_url and icon_url.startswith('http'):
+            embed.set_thumbnail(url=icon_url)
+
+        embed.add_field(name=TEXTS["member_by"], value=member.mention, inline=False)
+        embed.set_footer(text=self._footer(log_type, member.id))
+        await log_channel.send(embed=embed)
+
+    async def _log_role_perms_change(self, before, after, log_channel):
+        """Génère un log dédié pour un changement de permissions de rôle."""
+        await asyncio.sleep(AUDIT_LOG_DELAY_DEFAULT)
+        moderator = await self._get_moderator_from_audit_log(
+            after.guild, after.id, [discord.AuditLogAction.role_update], limit=50
+        )
+        member = moderator or after.guild.me
+
+        # Comparer les permissions (booléens True/False) au format Ancien/Nouveau
+        # En excluant les alias redondants (un seul nom par bit réel)
+        old_lines = []
+        new_lines = []
+        dangerous_added = []  # permissions dangereuses passées à True
+        for perm_name in discord.Permissions.VALID_FLAGS:
+            if perm_name in _PERMISSION_EXCLUDED:
+                continue
+            old_val = getattr(before.permissions, perm_name, False)
+            new_val = getattr(after.permissions, perm_name, False)
+            if old_val == new_val:
+                continue
+            label = PERMISSION_LABELS_FR.get(perm_name, perm_name.replace('_', ' ').title())
+            old_emoji = CUSTOM_EMOJIS["allow"] if old_val else CUSTOM_EMOJIS["deny"]
+            new_emoji = CUSTOM_EMOJIS["allow"] if new_val else CUSTOM_EMOJIS["deny"]
+            old_lines.append(f"{old_emoji} **{label}**")
+            new_lines.append(f"{new_emoji} **{label}**")
+            # Détecter les permissions dangereuses nouvellement accordées
+            if new_val and not old_val and perm_name in DANGEROUS_PERMISSIONS:
+                dangerous_added.append(label)
+
+        embed = discord.Embed(color=ROLE_COLORS["edited"])
+        embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
+        embed.description = f'{CUSTOM_EMOJIS["role_permission_edited"]} **{TEXTS["role_perms_title"]}**\n{TEXTS["role_perms_desc"].format(role=after.mention)}'
+
+        if old_lines:
+            embed.add_field(name=TEXTS["channel_perm_old_field"], value=truncate_text("\n".join(old_lines), 1000), inline=False)
+        if new_lines:
+            embed.add_field(name=TEXTS["channel_perm_new_field"], value=truncate_text("\n".join(new_lines), 1000), inline=False)
+
+        # Alerte DANGER si des permissions dangereuses ont été ajoutées
+        if dangerous_added:
+            danger_content = f"```diff\n- {TEXTS['role_perms_danger_desc']}\n" + "\n".join(f"- {p}" for p in dangerous_added) + "\n```"
+            embed.add_field(name=TEXTS["role_perms_danger_title"], value=danger_content, inline=False)
+
+        embed.add_field(name=TEXTS["member_by"], value=member.mention, inline=False)
+        embed.set_footer(text=self._footer("role_perms", member.id))
+        await log_channel.send(embed=embed)
 
     # --- LOGS INVITATIONS ---
 

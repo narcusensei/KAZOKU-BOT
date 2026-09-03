@@ -29,7 +29,10 @@ LOG_CHANNELS = {
     "action":   1493690708417052723,
     "file":     1353501728330354799,
     "server":   1353501830205931622,
-    "channel":  1353502124096491635
+    "channel":  1353502124096491635,
+    "roles":    1518186113578045490,
+    "command":  1532487860199096450,
+    "giveaway": 1544354898160652289
 }
 
 
@@ -121,6 +124,13 @@ CHANNEL_COLORS = {
     "unfollowed":         discord.Color(int("FF0000", 16))   # Rouge
 }
 
+# --- Couleurs des logs rôles ---
+ROLE_COLORS = {
+    "created":  discord.Color(int("00FF00", 16)),  # Vert
+    "deleted":  discord.Color(int("FF0000", 16)),  # Rouge
+    "edited":   discord.Color(int("FFD700", 16))   # Jaune
+}
+
 # --- Couleurs des logs webhooks ---
 WEBHOOK_COLORS = {
     "created":  discord.Color(int("00FF00", 16)),  # Vert
@@ -165,6 +175,9 @@ EVENT_COLORS = {
 
 # --- Couleur liste sanctions ---
 SANCTIONLIST_COLOR = discord.Color(int("800080", 16))  # Violet
+
+# --- Couleur des logs giveaway ---
+GIVEAWAY_COLOR = discord.Color(int("B821FF", 16))  # Violet
 
 # --- Couleurs serveur ---
 SERVER_COLORS = {
@@ -279,10 +292,27 @@ CUSTOM_EMOJIS = {
     "webhook_edited":  "<:webhookedited:1518283429291233463>",
     "webhook_updated": "<:webhookupdated:1518283430675218602>",
 
+    # Rôles
+    "role_created":            "<:rolescreated:1528414817927299226>",
+    "role_deleted":            "<:rolesdeleted:1528414819164754012>",
+    "role_edited":             "<:rolesedited:1528414820859379732>",
+    "role_permission_edited":  "<:rolespermissionedited:1528414821710827560>",
+    "role_added":              "<:rolesadded:1528414816811749396>",
+    "role_removed":            "<:rolesremoved:1528414822696489120>",
+
     # Permissions / Statut
     "neutral": "<:neutral:1521250990307934449>",
     "deny":    "<:deny:1521250989070356490>",
     "allow":   "<:allow:1521250987669721298>",
+
+    # Commandes
+    "command_used": "<:command:1532490948766859264>",
+    "info":         "<:info:1543917767521206322>",
+
+    # Giveaway
+    "giveaway":     "<:giveaway:1536503849823637594>",
+    "winner":       "<:winner:1543961179968245862>",
+    "participant":  "<:participant:1543961178726866964>",
 }
 
 
@@ -300,7 +330,6 @@ SANCTION_EMOJIS = {
 
 UNICODE_EMOJIS = {
     "ping":    "🏓",
-    "wave":    "👋",
     "check":   "✅",
     "cross":   "❌",
     "warning": "⚠️",
@@ -318,7 +347,6 @@ UNICODE_EMOJIS = {
 TEXTS = {
     # --- Commandes base ---
     "ping_response":           "Pong ! Latence :",
-    "hello_response":          "Salut",
     "profile_error":           "Une erreur est survenue lors de l'affichage du profil.",
     "profile_no_roles":        "Aucun rôle",
     "profile_not_on_server":   "Inconnu (Pas sur le serveur)",
@@ -398,6 +426,10 @@ TEXTS = {
     "data_save_error":                  "Erreur lors de la sauvegarde.",
 
     # --- Logs : divers ---
+    "command_used_title":               "COMMANDE UTILISÉE",
+    "info_title":                       "INFO COMMANDE",
+    "command_used_desc":                "Une commande modération à été utilisé",
+    "command_name_field":               "Commande",
     "unknown":                          "Inconnu",
     "none":                             "Aucune",
     "slowmode_disabled":                "Désactivé",
@@ -513,6 +545,10 @@ TEXTS = {
     "member_roles":                     "Rôles",
     "member_role_add_title":            "RÔLES AJOUTÉS",
     "member_role_remove_title":         "RÔLES RETIRÉS",
+    "member_role_add_one_desc":         "Un rôle à été ajouté pour {user}",
+    "member_role_add_many_desc":        "Des rôles ont été ajoutés pour {user}",
+    "member_role_remove_one_desc":      "Un rôle à été retiré pour {user}",
+    "member_role_remove_many_desc":     "Des rôles ont été retirés pour {user}",
     "member_role_field":                "Rôle(s)",
     "member_by":                        "Par",
     "member_nick_title":                "NOM MODIFIÉ",
@@ -566,7 +602,7 @@ TEXTS = {
     "thread_created_desc":              "Création d'un fil",
     "thread_created_text":              "a créé un nouveau fil",
     "thread_deleted_title":             "FIL SUPPRIMÉ",
-    "thread_deleted_text":              "a supprimé le fil",
+    "thread_deleted_text":              "a supprimé un fil",
     "thread_deleted_unknown":           "Fil supprimé",
     "thread_modified_title":            "FIL MODIFIÉ",
     "thread_locked_title":              "FIL VÉRROUILLÉ",
@@ -673,11 +709,88 @@ TEXTS = {
     "webhook_avatar_updated_desc":      "L'avatar du webhook **{name}** à été modifié",
     "webhook_avatar_removed_desc":      "L'avatar du webhook **{name}** à été retiré",
 
+    # --- Logs : giveaway ---
+    "giveaway_id_field":                "ID Giveaway",
+    "giveaway_ends_field":              "Fin dans",
+    "giveaway_ends_log_field":          "Fin",
+    "giveaway_created_by":              "Créé par",
+    "giveaway_participants":            "Participation(s)",
+    "giveaway_winners":                 "Gagnant(s)",
+    "giveaway_no_winners":              "Aucun",
+
+    # --- Giveaway : commandes ---
+    "giveaway_button_join":             "Participer",
+    "giveaway_open_form_button":        "Ouvrir le formulaire",
+    "giveaway_form_title":              "Créer un Giveaway",
+    "giveaway_form_time_label":         "Temps (ex: 30s, 10min, 1h, 2jours)",
+    "giveaway_form_winners_label":      "Nombre de gagnants",
+    "giveaway_form_prize_label":        "Récompense",
+    "giveaway_form_desc_label":         "Description (1000 caractères max)",
+    "giveaway_time_invalid":            "Temps invalide. Formats acceptés : 30s, 10min, 1h, 2jours",
+    "giveaway_winners_invalid":         "Le nombre de gagnants doit être un nombre ≥ 1",
+    "giveaway_desc_too_long":           "La description ne peut pas dépasser 1000 caractères",
+    "giveaway_created_ok":              "✅ Giveaway #{gid} créé !",
+    "giveaway_create_error":            "❌ Erreur lors de la création du giveaway.",
+    "giveaway_not_found":               "❌ Giveaway #{gid} introuvable",
+    "giveaway_not_ended":               "❌ Ce giveaway n'est pas encore terminé.",
+    "giveaway_already_ended":           "❌ Ce giveaway est déjà terminé",
+    "giveaway_ended_ok":                "✅ Giveaway #{gid} terminé !",
+    "giveaway_deleted_ok":              "✅ Giveaway #{gid} supprimé !",
+    "giveaway_rerolled_ok":             "✅ Nouveau tirage effectué pour le giveaway #{gid} !",
+    "giveaway_join_ok":                 "✅ Tu participes au giveaway **{prize}** !",
+    "giveaway_leave_ok":                "❌ Ta participation au giveaway **{prize}** à été retirée.",
+    "giveaway_msg_title":               "GIVEAWAY — {prize}",
+    "giveaway_msg_ended_title":         "GIVEAWAY TERMINÉ — {prize}",
+    "giveaway_msg_deleted_title":       "GIVEAWAY SUPPRIMÉ — {prize}",
+    "giveaway_winners_announce":        "🎉 Félicitation {winners} !! Tu as gagné **{prize}** !!",
+    "giveaway_winners_announce_many":   "🎉 Félicitation {winners} !! Vous avez gagné **{prize}** !!",
+    "giveaway_stopped_announce":        "Le Giveaway à été arrêté par conséquent aucun gagnant n'a été désigné.",
+    "giveaway_deleted_announce":        "🗑️ Le Giveaway **{prize}** à été supprimé avec succès",
+    "giveaway_reroll_announce":         "🔄 {admin} à relancé le Giveaway | 🎉 Félicitation {winners}",
+    "giveaway_no_participants":         "Aucun participant",
+
+    # --- Logs : rôles serveur ---
+    "role_created_title":               "RÔLE CRÉÉ",
+    "role_deleted_title":               "RÔLE SUPPRIMÉ",
+    "role_edited_title":                "RÔLE MODIFIÉ",
+    "role_created_desc":                "Le rôle `{name}` à été créé",
+    "role_deleted_desc":                "Le rôle `{name}` à été supprimé",
+    "role_edited_desc":                 "Le rôle `{name}` à été modifié",
+    "role_name_field":                  "Nom",
+    "role_color_field":                 "Couleur",
+    "role_hoist_field":                 "Affiché séparément",
+    "role_mentionable_field":           "Mentionnable",
+    "role_yes":                         "Oui",
+    "role_no":                          "Non",
+    "role_field":                       "Rôle",
+    "role_icon_title":                  "ICÔNE RÔLE MODIFIÉ",
+    "role_icon_added_desc":             "L'icône du rôle {role} à été ajouté",
+    "role_icon_updated_desc":           "L'icône du rôle {role} à été modifié",
+    "role_icon_removed_desc":           "L'icône du rôle {role} à été supprimé",
+    "role_perms_title":                 "PERMISSIONS RÔLE MODIFIÉ",
+    "role_perms_desc":                  "Les permissions du rôle {role} ont été modifiées",
+    "role_perms_danger_title":          "⚠️ DANGER !!!",
+    "role_perms_danger_desc":           "Permissions dangereuse(s) ajoutée(s)",
+
     # --- Logs : channels ---
     "channel_created_title":            "CHANNEL {type} CRÉÉ",
     "channel_created_desc":             "Le channel {channel} à été créé par {moderator}",
     "channel_created_in_category":      " dans la catégorie {category}",
     "channel_deleted_title":            "CHANNEL {type} SUPPRIMÉ",
+    "channel_edited_title":             "CHANNEL {type} MODIFIÉ",
+    "category_edited_title":            "CATÉGORIE MODIFIÉE",
+    "channel_edited_desc":              "Le channel {channel} à été modifié",
+    "category_edited_desc":             "La catégorie {channel} à été modifiée",
+    "channel_no_category":              "Aucune",
+    "channel_unlimited":                "Illimité",
+    "channel_prop_name":                "Nom",
+    "channel_prop_topic":               "Description",
+    "channel_prop_slowmode":            "Mode lent",
+    "channel_prop_archive":             "Masquer après inactivité",
+    "channel_prop_category":            "Catégorie",
+    "channel_prop_nsfw":                "NSFW",
+    "channel_prop_bitrate":             "Débit",
+    "channel_prop_userlimit":           "Limite utilisateurs",
     "channel_deleted_desc":             "Le channel {channel} à été supprimé par {moderator}",
     "category_created_title":           "CATÉGORIE CRÉÉE",
     "category_deleted_title":           "CATÉGORIE SUPPRIMÉE",
@@ -803,6 +916,29 @@ PERMISSION_LABELS_FR = {
 }
 
 
+# ============ PERMISSIONS DANGEREUSES =======================
+# Permissions considérées comme critiques/sensibles : si l'une d'elles est
+# ajoutée à un rôle, une alerte "DANGER" est affichée dans le log.
+DANGEROUS_PERMISSIONS = {
+    "administrator",
+    "manage_guild",
+    "manage_channels",
+    "manage_roles",
+    "manage_webhooks",
+    "manage_messages",
+    "manage_threads",
+    "manage_expressions",
+    "manage_events",
+    "ban_members",
+    "kick_members",
+    "moderate_members",
+    "view_audit_log",
+    "view_guild_insights",
+    "mention_everyone",
+    "view_creator_monetization_analytics",
+}
+
+
 # =============== PERMISSIONS =================================
 # Rôles autorisés par commande.
 # "+" = Owner/Admin, "~" = Modérateur, "-" = Helper
@@ -815,7 +951,17 @@ PERMISSIONS = {
     "clear":         ["+", "~", "-"],
     "sanctionliste": ["+", "~", "-"],
     "unban":         ["+"],
-    "unmute":        ["+", "~"]
+    "unmute":        ["+", "~"],
+
+    # Giveaway
+    "createg":       ["+", "~"],
+    "startg":        ["+", "~"],
+    "endg":          ["+", "~"],
+    "deletedg":      ["+", "~"],
+    "rerollg":       ["+", "~"],
+
+    # Dev
+    "sync":          ["+"]
 }
 
 SANCTION_TYPES = ["Ban", "Kick", "Mute", "Avertissement"]
@@ -826,6 +972,7 @@ SANCTION_TYPES = ["Ban", "Kick", "Mute", "Avertissement"]
 DATA_DIR = "data"
 WARNINGS_FILE = "data/warnings.json"
 MEMBERS_FILE = "data/members.json"
+GIVEAWAYS_FILE = "data/giveaways.json"
 
 
 # ============= LOG TYPE IDS ==================================
@@ -933,6 +1080,27 @@ LOG_TYPE_IDS = {
     "webhook_avatar_updated": 81,
     "webhook_avatar_removed": 82,
 
+    # --- Rôles serveur (#L87 - #L89) ---
+    "role_create":            87,
+    "role_delete":            88,
+    "role_update":            89,
+    "role_icon_added":        90,
+    "role_icon_updated":      91,
+    "role_icon_removed":      92,
+    "role_perms":             93,
+
+    # --- Commandes modération (#L94) ---
+    "command_used":           94,
+
+    # --- Channel edité (#L95) ---
+    "channel_edit":           95,
+
+    # --- Info commande (#L96) ---
+    "info":                   96,
+
+    # --- Giveaway (#L97) ---
+    "giveaway":               97,
+
     # --- Invitations (#L56 - #L57) ---
     "invite_create":          56,
     "invite_delete":          57,
@@ -980,7 +1148,15 @@ MAX_SANCTIONS_SELECT = 24
 AUDIT_LOG_TIMEOUT = 5
 AUDIT_LOG_LIMIT = 100
 THREAD_REOPEN_THRESHOLD = 120  # secondes
-CONTENT_MAX_LENGTH = 1024
+CONTENT_MAX_LENGTH = 1000  # < 1024 : laisse la marge pour les préfixes de formatage (">>> " etc.)
+
+# Sauvegarde proactive des pièces jointes (pour les logs de suppression)
+# Le bot met en cache les fichiers des messages pour pouvoir les restaurer
+# après suppression (individuelle ou en masse type ban).
+# ATTENTION : consomme de la mémoire. MAX_ATTACHMENT_CACHE_SIZE borne le cache.
+MAX_ATTACHMENT_CACHE_SIZE = 500   # nombre maximum de messages mis en cache
+ATTACHMENT_CACHE_TTL = 3600       # durée de vie en secondes (1h)
+MAX_ATTACHMENT_FILE_SIZE = 8_000_000  # taille max par fichier (8 Mo) - on ignore les gros fichiers
 
 # Délais d'attente (en secondes) pour la disponibilité des audit logs Discord.
 # Discord crée les entries audit log avec un léger décalage ; ces sleeps permettent
