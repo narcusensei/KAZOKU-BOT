@@ -15,10 +15,14 @@ backup_*/
 *_backup/
 *.bak
 
+# --- Données d'exécution du bot (contient des données perso) ---
+data/*.json
+
 # --- Config locale IDE ---
 .claude/
 .vscode/
 .idea/
+.zcode/
 
 # --- Assets / dossiers locaux non nécessaires au repo ---
 img/
