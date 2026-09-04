@@ -1,6 +1,6 @@
 # 👑 K4ZK-BOT
 
-Bot Discord du serveur **KAZOKU** — modération, logs avancés et giveaways.
+Bot Discord du serveur **K4ZOKU** — modération, logs avancés et giveaways.
 
 ## 🌐 Rejoindre le serveur
 
@@ -136,4 +136,4 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 ### ⚠️ Marques et identité visuelle
 
-La licence AGPL-3.0 couvre **le code uniquement**. Le nom « **KAZOKU** », le logo, l'avatar du bot et l'ensemble des visuels du projet restent la **propriété exclusive** de leur auteur et **ne peuvent pas être réutilisés** pour d'autres instances publiques sans autorisation écrite préalable.
+La licence AGPL-3.0 couvre **le code uniquement**. Le nom « **K4ZOKU** », le logo, l'avatar du bot et l'ensemble des visuels du projet restent la **propriété exclusive** de leur auteur et **ne peuvent pas être réutilisés** pour d'autres instances publiques sans autorisation écrite préalable.
