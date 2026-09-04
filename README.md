@@ -90,7 +90,8 @@ venv/Scripts/activate        # Windows
 pip install -r requirements.txt
 
 # 4. Configurer le token
-# Créer un fichier .env à la racine :
+cp .env.example .env
+# puis éditer .env et y inscrire votre token :
 # DISCORD_TOKEN=votre_token_ici
 
 # 5. Lancer le bot
@@ -126,4 +127,13 @@ KAZOKU-BOT/
 
 ## 📜 Licence
 
-Projet personnel du serveur KAZOKU — tous droits réservés.
+Ce projet est distribué sous la licence **[AGPL-3.0](LICENSE)**.
+
+```
+Copyright (c) 2026 narcus
+SPDX-License-Identifier: AGPL-3.0-only
+```
+
+### ⚠️ Marques et identité visuelle
+
+La licence AGPL-3.0 couvre **le code uniquement**. Le nom « **KAZOKU** », le logo, l'avatar du bot et l'ensemble des visuels du projet restent la **propriété exclusive** de leur auteur et **ne peuvent pas être réutilisés** pour d'autres instances publiques sans autorisation écrite préalable.

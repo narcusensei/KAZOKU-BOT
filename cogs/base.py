@@ -1,3 +1,6 @@
+# Copyright (c) 2026 narcus
+# SPDX-License-Identifier: AGPL-3.0-only
+
 import discord
 import asyncio
 from discord import app_commands
