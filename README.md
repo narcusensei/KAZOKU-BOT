@@ -1,6 +1,6 @@
 # 👑 K4ZK-BOT
 
-Bot Discord du serveur **K4ZOKU** — modération, logs avancés et giveaways.
+Bot Discord du serveur **K4ZOKU** — modération, logs avancés, giveaways et rappels.
 
 ## 🌐 Rejoindre le serveur
 
@@ -15,6 +15,7 @@ Bot Discord du serveur **K4ZOKU** — modération, logs avancés et giveaways.
 | 🛡️ **Modération** | Sanctions avec historique persistant (mutes, kicks, bans, avertissements) |
 | 📋 **Logs** | Journalisation ultra-complète du serveur en embeds enrichis |
 | 🎁 **Giveaways** | Création, gestion et reroll de cadeaux avec boutons |
+| ⏰ **Rappels** | Rappels automatiques personnalisés avec suivi persistant |
 
 ### 📋 Logs couverts
 
@@ -63,6 +64,12 @@ Préfixe : `+` (les commandes existent aussi en slash commands `/`)
 | `+endg` | Terminer un giveaway |
 | `+deletedg` | Supprimer un giveaway |
 | `+rerollg` | Tirer de nouveaux gagnants |
+
+### Rappels (`cogs/reminder.py`)
+| Commande | Description |
+|---|---|
+| `+reminder` | Créer un rappel via formulaire (message, salon, date/heure) |
+| `+reminderlist` | Liste interactive des rappels |
 
 ## ⚙️ Installation
 
@@ -121,7 +128,8 @@ KAZOKU-BOT/
 │   ├── base.py          # Commandes générales
 │   ├── moderation.py    # Sanctions + historique
 │   ├── logs.py          # Journalisation complète
-│   └── giveaway.py      # Système de giveaways
+│   ├── giveaway.py      # Système de giveaways
+│   └── reminder.py      # Rappels automatiques
 └── data/                # Données runtime (auto-généré, ignoré)
 ```
 
