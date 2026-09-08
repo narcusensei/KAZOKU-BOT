@@ -128,12 +128,14 @@ class Base(commands.Cog):
 
     @commands.hybrid_command(name="info", description="Affiche la liste des commandes (Show command list)")
     async def info_slash(self, ctx: commands.Context):
-        """Affiche la liste de toutes les commandes du bot."""
+        """Affiche la liste de toutes les commandes du bot, réparties par catégorie."""
         commands_list = (
-            "**Liste des commande :**\n\n"
+            "━━━━━━━ 🤖 **GÉNÉRAL** ━━━━━━━\n"
             "**Ping** - `/ping ou +ping`\n"
             "**Profile User** - `/profil ou +profil [user]`\n"
-            "**Sync Commande** - `/sync ou +sync`\n"
+            "**Info** - `/info ou +info`\n"
+            "**Sync** - `/sync ou +sync`\n"
+            "━━━━━━━ 🔨 **MODÉRATION** ━━━━━━━\n"
             "**Supprimer Message** - `/clear ou +clear 50 [user]`\n"
             "**Mute** - `/mute ou +mute [user] [raison] [h] [m] [s]`\n"
             "**Unmute** - `/unmute ou +unmute [user]`\n"
@@ -142,11 +144,15 @@ class Base(commands.Cog):
             "**Unban** - `/unban ou +unban [ID User] [raison]`\n"
             "**Avertissement** - `/avert ou +avert [user] [raison]`\n"
             "**Liste Sanction** - `/sanctionliste ou +sanctionliste [user]`\n"
-            "**Créer Giveaway** - `/createg ou +createg`\n"
-            "**Démarrer Giveaway** - `/startg ou +startg [temps] [gagnants] [récompense]`\n"
-            "**Terminer Giveaway** - `/endg ou +endg [ID]`\n"
-            "**Supprimer Giveaway** - `/deletedg ou +deletedg [ID]`\n"
-            "**Reroll Giveaway** - `/rerollg ou +rerollg [ID]`"
+            "━━━━━━━ 🎉 **GIVEAWAY** ━━━━━━━\n"
+            "**Créer** - `/gcreate ou +gcreate`\n"
+            "**Démarrer** - `/gstart ou +gstart [temps] [gagnants] [récompense] [desc]`\n"
+            "**Terminer** - `/gend ou +gend [ID]`\n"
+            "**Supprimer** - `/gdelete ou +gdelete [ID]`\n"
+            "**Reroll** - `/greroll ou +greroll [ID]`\n"
+            "━━━━━━━ ⏰ **RAPPEL** ━━━━━━━\n"
+            "**Créer** - `/reminder ou +reminder`\n"
+            "**Liste** - `/reminderlist ou +reminderlist`"
         )
 
         embed = discord.Embed(color=discord.Color(int("B821FF", 16)))  # Violet
@@ -203,13 +209,15 @@ class Base(commands.Cog):
     @commands.hybrid_command(name='sync', description="Synchronise les commandes slash sur le serveur (Dev)")
     async def sync(self, ctx: commands.Context):
         """Synchronise les commandes slash sur le serveur (Dev, réservé Owner/Admin)."""
-        # Vérification de permission (délègue au cog Moderation)
-        mod_cog = self.bot.get_cog('Moderation')
-        if mod_cog and not await mod_cog.check_permission(ctx, "sync"):
-            await ctx.send("❌ Commande réservée au propriétaire du serveur.", ephemeral=True)
-            return
+        # Check guild EN PREMIER (check_permission accède à guild.owner_id)
         if ctx.guild is None:
-            await ctx.send("❌ Cette commande doit être utilisée dans un serveur.", ephemeral=True)
+            await send_auto_delete(ctx, "❌ Cette commande doit être utilisée dans un serveur.", ephemeral=True)
+            return
+
+        # Vérification de permission (fail-closed : refuser si le cog Moderation est absent)
+        mod_cog = self.bot.get_cog('Moderation')
+        if not mod_cog or not await mod_cog.check_permission(ctx, "sync"):
+            await send_auto_delete(ctx, "❌ Commande réservée à l'Owner et aux Admins.", ephemeral=True)
             return
 
         print("🔄 Synchronisation des commandes slash...")

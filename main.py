@@ -17,7 +17,8 @@ COGS_EXTENSIONS: List[str] = [
     "cogs.base",
     "cogs.moderation",
     "cogs.logs",
-    "cogs.giveaway"
+    "cogs.giveaway",
+    "cogs.reminder"
 ]
 
 # --- CONFIGURATION ---
@@ -56,17 +57,26 @@ def create_bot() -> commands.Bot:
     async def on_command_error(ctx, error):
         if isinstance(error, commands.CommandNotFound):
             return  # Ignorer les commandes inconnues (évite le spam)
+
+        message = None
         if isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send(f"❌ Argument manquant : `{error.param.name}`", ephemeral=True)
-            return
-        if isinstance(error, commands.BadArgument):
-            await ctx.send("❌ Argument invalide. Vérifie le format (mention, nombre...).", ephemeral=True)
-            return
-        if isinstance(error, commands.CommandInvokeError):
+            message = f"❌ Argument manquant : `{error.param.name}`"
+        elif isinstance(error, commands.BadArgument):
+            message = "❌ Argument invalide. Vérifie le format (mention, nombre...)."
+        elif isinstance(error, commands.CommandInvokeError):
             print(f"❌ Erreur commande '{ctx.command.name}' : {error.original}")
-            await ctx.send("❌ Une erreur est survenue lors de l'exécution de la commande.", ephemeral=True)
-            return
-        print(f"❌ Erreur commande : {error}")
+            message = "❌ Une erreur est survenue lors de l'exécution de la commande."
+        else:
+            print(f"❌ Erreur commande : {error}")
+
+        if message:
+            try:
+                sent = await ctx.send(message, ephemeral=True)
+                # Auto-suppression en préfixe (comme les autres réponses éphémères)
+                if ctx.interaction is None:
+                    await sent.delete(delay=15)
+            except (discord.Forbidden, discord.HTTPException, AttributeError):
+                pass
 
     return bot
 

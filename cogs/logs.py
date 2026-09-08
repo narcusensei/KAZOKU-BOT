@@ -513,9 +513,8 @@ class Logs(commands.Cog):
         emoji = SANCTION_EMOJIS_MAP.get(action_type, CUSTOM_EMOJIS["sanction_yellow"])
 
         embed = discord.Embed(color=color)
-        embed.set_author(name=f"{target.global_name or target.name} ({action_type})", icon_url=target.display_avatar.url)
-        if duration_str:
-            embed.description = f"{emoji} **{action_type.upper()}**"
+        embed.set_author(name=target.global_name or target.name, icon_url=target.display_avatar.url)
+        embed.description = f"{emoji} **{action_type.upper()}**"
         embed.add_field(name=TEXTS["user_field"], value=f"<@{target.id}>", inline=True)
         embed.add_field(name=TEXTS["moderator_field"], value=f"<@{moderator.id}>" if moderator else TEXTS["unknown_moderator"], inline=True)
         embed.add_field(name=TEXTS["reason_field"], value=truncate_text(reason or TEXTS["no_reason"], 1000), inline=False)
@@ -1123,7 +1122,7 @@ class Logs(commands.Cog):
                 embed.add_field(name=TEXTS["message_file"], value=f"{TEXTS['message_attachment']} {att.filename}", inline=False)
         elif message.content:
             content_show = truncate_content(message.content)
-            embed.add_field(name=TEXTS["message_field"], value=f">>> {content_show}", inline=False)
+            embed.add_field(name=TEXTS["message_field"], value=f"{content_show}", inline=False)
 
         embed.add_field(name=TEXTS["message_author_field"], value=message.author.mention, inline=True)
         embed.add_field(name=TEXTS["message_channel_field"], value=message.channel.mention, inline=True)
@@ -1223,7 +1222,7 @@ class Logs(commands.Cog):
 
             content = after.content or TEXTS["empty_content"]
             content = truncate_content(content)
-            embed.add_field(name=TEXTS["message_field"], value=f">>> {content}", inline=False)
+            embed.add_field(name=TEXTS["message_field"], value=f"{content}", inline=False)
             embed.add_field(name=TEXTS["message_author"], value=after.author.mention, inline=True)
 
             if is_pin and moderator:

@@ -201,9 +201,9 @@ DEFAULT_COLOR = discord.Color(int("FFD700", 16))  # Jaune
 
 CUSTOM_EMOJIS = {
     # Sanctions
-    "sanction_red":    "<:sanctionred:1488276069298606110>",
-    "sanction_green":  "<:sanctiongreen:1488276067352318023>",
-    "sanction_yellow": "<:sanctionyellow:1488276077179834488>",
+    "sanction_red":    "<:sanctionred:1545505251241496577>",
+    "sanction_green":  "<:sanctiongreen:1545505250113490974>",
+    "sanction_yellow": "<:sanctionyellow:1545505252357316699>",
 
     # Vocal
     "mic_mute":              "<:micmute:1488276063258808381>",
@@ -316,20 +316,24 @@ CUSTOM_EMOJIS = {
     "giveaway":     "<:giveaway:1536503849823637594>",
     "winner":       "<:winner:1543961179968245862>",
     "participant":  "<:participant:1543961178726866964>",
+
+    # Sanctions
+    "deleted":      "<:deleted:1546899583727304785>",
+}
+
+# Mapping des emojis custom de sanction (utilisé dans les confirmations ET les logs)
+SANCTION_CUSTOM_EMOJIS = {
+    "Ban":           "sanction_red",
+    "Kick":          "sanction_red",
+    "Mute":          "sanction_red",
+    "Unban":         "sanction_green",
+    "Unmute":        "sanction_green",
+    "Avertissement": "sanction_yellow",
 }
 
 
 # ================ EMOJIS UNICODE ============================
 # Emojis standards utilisés dans les embeds et réponses.
-
-SANCTION_EMOJIS = {
-    "Ban":           "⛔",
-    "Unban":         "🔓",
-    "Kick":          "👞",
-    "Mute":          "🔇",
-    "Unmute":        "🔊",
-    "Avertissement": "⚠️"
-}
 
 UNICODE_EMOJIS = {
     "ping":    "🏓",
@@ -392,27 +396,32 @@ TEXTS = {
     "cannot_warn_bot":                  "Impossible d'avertir un bot.",
 
     # --- Modération : sanctions ---
-    "mute_title":                       "[MUTE]",
+    "mute_title":                       "MUTE",
     "mute_description":                 "a été mute pour {dur}.",
     "mute_reason":                      "Raison",
-    "sanction_by":                      "Par {name}",
-    "unmute_title":                     "[UNMUTE]",
+    "unmute_title":                     "UNMUTE",
     "unmute_description":               "a été unmute.",
     "unmute_reason":                    "Fin du timeout",
-    "kick_title":                       "[KICK]",
+    "kick_title":                       "KICK",
     "kick_description":                 "a été kické.",
-    "ban_title":                        "[BAN]",
+    "ban_title":                        "BAN",
     "ban_description":                  "a été banni.",
-    "unban_title":                      "[UNBAN]",
+    "unban_title":                      "UNBAN",
     "unban_description":                "a été débanni.",
-    "avert_title":                      "[AVERTISSEMENT]",
-    "avert_description":                "a été averti. (Total: {count})",
+    "avert_title":                      "AVERTISSEMENT",
+    "avert_description":                "a été averti. Total : {count}",
     "avert_dm_title":                   "⚠️ AVERTISSEMENT",
     "avert_dm_description":             "Tu as reçu un avertissement sur **{guild}**.",
     "clear_success":                    "✅ Suppression de {n} message(s).",
 
     # --- Modération : sanctionliste ---
     "sanctionlist_title":               "Sanctions de {name}",
+    "sanction_deleted_log_title":       "SANCTION SUPPRIMÉE",
+    "sanction_deleted_log_desc":        "Une sanction a été supprimée du registre",
+    "sanction_deleted_by_field":        "Supprimée par",
+    "sanction_deleted_target_field":    "Utilisateur",
+    "sanction_all_deleted_log_title":   "TOUTES LES SANCTIONS SUPPRIMÉES",
+    "sanction_all_deleted_log_desc":    "{count} sanction(s) supprimée(s) du registre",
     "sanctionlist_empty":               "Aucune sanction. 🎉",
     "sanctionlist_reason":              "Raison :",
     "sanctionlist_by":                  "Par :",
@@ -752,6 +761,32 @@ TEXTS = {
     "giveaway_reroll_announce":         "🔄 {admin} à relancé le Giveaway | 🎉 Félicitation {winners}",
     "giveaway_no_participants":         "Aucun participant",
 
+    # --- Rappels ---
+    "reminder_created_title":           "RAPPEL PROGRAMMÉ",
+    "reminder_created_desc":            "Un rappel a été créé",
+    "reminder_deleted_title":           "RAPPEL SUPPRIMÉ",
+    "reminder_deleted_desc":            "Un rappel a été supprimé",
+    "reminder_role_field":              "Rôle ciblé",
+    "reminder_reason_field":            "Motif",
+    "reminder_trigger_field":           "Déclenchement",
+    "reminder_auto_default":            "Ceci est un message de rappel automatique",
+    "reminder_list_title":              "RAPPEL(S)",
+    "reminder_list_empty":              "Aucun rappel actif.",
+    "reminder_list_placeholder":        "Sélectionne un rappel...",
+    "reminder_delete_button":           "🗑️ Supprimer ce rappel",
+    "reminder_delete_all_button":       "⚠️ Supprimer TOUS les rappels",
+    "reminder_deleted_ok":              "✅ Rappel supprimé !",
+    "reminder_all_deleted_ok":          "✅ Tous les rappels ont été supprimés !",
+    "reminder_form_title":              "Créer un Rappel",
+    "reminder_form_interval_label":     "Intervalle (ex: 1h, 30min, 2j)",
+    "reminder_form_role_label":         "ID du rôle à mentionner",
+    "reminder_form_name_label":         "Nom du rappel",
+    "reminder_form_desc_label":         "Description (Optionnel)",
+    "reminder_interval_invalid":        "Intervalle invalide. Formats : 30min, 1h, 2jours (min: 5min)",
+    "reminder_role_invalid":            "ID de rôle invalide ou rôle introuvable.",
+    "reminder_created_ok":              "✅ Rappel créé !",
+    "reminder_create_error":            "❌ Erreur lors de la création du rappel.",
+
     # --- Logs : rôles serveur ---
     "role_created_title":               "RÔLE CRÉÉ",
     "role_deleted_title":               "RÔLE SUPPRIMÉ",
@@ -947,24 +982,28 @@ DANGEROUS_PERMISSIONS = {
 # "+" = Owner/Admin, "~" = Modérateur, "-" = Helper
 
 PERMISSIONS = {
-    "kick":          ["+", "~", "-"],
+    "kick":          ["+", "~"],
     "ban":           ["+", "~"],
     "mute":          ["+", "~", "-"],
     "avert":         ["+", "~", "-"],
     "clear":         ["+", "~", "-"],
-    "sanctionliste": ["+", "~", "-"],
+    "sanctionliste": ["+", "~"],
     "unban":         ["+"],
     "unmute":        ["+", "~"],
 
     # Giveaway
-    "createg":       ["+", "~"],
-    "startg":        ["+", "~"],
-    "endg":          ["+", "~"],
-    "deletedg":      ["+", "~"],
-    "rerollg":       ["+", "~"],
+    "gcreate":       ["+", "~"],
+    "gstart":        ["+", "~"],
+    "gend":          ["+", "~"],
+    "gdelete":      ["+", "~"],
+    "greroll":       ["+", "~"],
 
     # Dev
-    "sync":          ["+"]
+    "sync":          ["+"],
+
+    # Rappels
+    "reminder":      ["+", "~"],
+    "reminderlist":  ["+", "~"]
 }
 
 SANCTION_TYPES = ["Ban", "Kick", "Mute", "Avertissement"]
@@ -976,6 +1015,7 @@ DATA_DIR = "data"
 WARNINGS_FILE = "data/warnings.json"
 MEMBERS_FILE = "data/members.json"
 GIVEAWAYS_FILE = "data/giveaways.json"
+REMINDERS_FILE = "data/reminders.json"
 
 
 # ============= LOG TYPE IDS ==================================
@@ -1103,6 +1143,16 @@ LOG_TYPE_IDS = {
 
     # --- Giveaway (#L97) ---
     "giveaway":               97,
+
+    # --- Reminder (#L98 - #L101) ---
+    "reminder_create":        98,
+    "reminder_delete":        99,
+    "reminder_auto":         100,
+    "reminder_list":         101,
+
+    # --- Sanctions suppression (#L102 - #L103) ---
+    "sanction_delete":       102,
+    "sanction_delete_all":   103,
 
     # --- Invitations (#L56 - #L57) ---
     "invite_create":          56,

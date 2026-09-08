@@ -324,7 +324,7 @@ class Giveaway(commands.Cog):
     async def create_giveaway(self, source, prize: str, description: str, winners_count: int, duration: timedelta):
         """Crée un giveaway actif : message public + log #L097 + sauvegarde JSON.
 
-        `source` : interaction (modal) ou Context (startg).
+        `source` : interaction (modal) ou Context (gstart).
         Retourne l'ID du giveaway créé, ou None en cas d'échec.
         Les appels réseau sont faits HORS lock ; le lock ne protège que le JSON.
         """
@@ -593,14 +593,14 @@ class Giveaway(commands.Cog):
 
     # --- COMMANDES ---
 
-    @commands.hybrid_command(name="createg", description="Créer un giveaway via formulaire (Create a giveaway)")
-    async def createg_slash(self, ctx: commands.Context):
+    @commands.hybrid_command(name="gcreate", description="Créer un giveaway via formulaire (Create a giveaway)")
+    async def gcreate_slash(self, ctx: commands.Context):
         """Ouvre le formulaire interactif de création de giveaway."""
-        if not await self.check_permission(ctx, "createg"):
+        if not await self.check_permission(ctx, "gcreate"):
             await send_auto_delete(ctx, TEXTS["permission_denied"], ephemeral=True)
             return
 
-        self.log_command_use(ctx, "createg")
+        self.log_command_use(ctx, "gcreate")
 
         if ctx.interaction is not None:
             # Slash : ouvrir le modal directement
@@ -612,20 +612,20 @@ class Giveaway(commands.Cog):
                 view=OpenFormView(self, ctx.author.id)
             )
 
-    @commands.hybrid_command(name="startg", description="Créer un giveaway directement (Start a giveaway)")
+    @commands.hybrid_command(name="gstart", description="Créer un giveaway directement (Start a giveaway)")
     @app_commands.describe(
         time="Temps (ex: 30s, 10min, 1h, 2jours)",
         winner="Nombre de gagnants (1-25)",
         prize="Récompense",
         desc="Description (Optionnel/Optional)"
     )
-    async def startg_slash(self, ctx: commands.Context, time: str, winner: int, prize: str, desc: str = ""):
+    async def gstart_slash(self, ctx: commands.Context, time: str, winner: int, prize: str, desc: str = ""):
         """Crée et démarre un giveaway avec les paramètres donnés."""
-        if not await self.check_permission(ctx, "startg"):
+        if not await self.check_permission(ctx, "gstart"):
             await send_auto_delete(ctx, TEXTS["permission_denied"], ephemeral=True)
             return
 
-        self.log_command_use(ctx, "startg")
+        self.log_command_use(ctx, "gstart")
 
         duration = parse_duration(time)
         if duration is None:
@@ -651,15 +651,15 @@ class Giveaway(commands.Cog):
         else:
             await send_auto_delete(ctx, TEXTS["giveaway_create_error"], ephemeral=True)
 
-    @commands.hybrid_command(name="endg", description="Terminer un giveaway (End a giveaway)")
+    @commands.hybrid_command(name="gend", description="Terminer un giveaway (End a giveaway)")
     @app_commands.describe(giveaway_id="ID du giveaway")
-    async def endg_slash(self, ctx: commands.Context, giveaway_id: str):
+    async def gend_slash(self, ctx: commands.Context, giveaway_id: str):
         """Termine immédiatement un giveaway et tire les gagnants."""
-        if not await self.check_permission(ctx, "endg"):
+        if not await self.check_permission(ctx, "gend"):
             await send_auto_delete(ctx, TEXTS["permission_denied"], ephemeral=True)
             return
 
-        self.log_command_use(ctx, "endg")
+        self.log_command_use(ctx, "gend")
 
         gid, g = self._get_giveaway(giveaway_id)
         if not g:
@@ -676,15 +676,15 @@ class Giveaway(commands.Cog):
         else:
             await send_auto_delete(ctx, TEXTS["giveaway_already_ended"], ephemeral=True)
 
-    @commands.hybrid_command(name="deletedg", description="Supprimer un giveaway (Delete a giveaway)")
+    @commands.hybrid_command(name="gdelete", description="Supprimer un giveaway (Delete a giveaway)")
     @app_commands.describe(giveaway_id="ID du giveaway")
-    async def deletedg_slash(self, ctx: commands.Context, giveaway_id: str):
+    async def gdelete_slash(self, ctx: commands.Context, giveaway_id: str):
         """Annule et supprime un giveaway."""
-        if not await self.check_permission(ctx, "deletedg"):
+        if not await self.check_permission(ctx, "gdelete"):
             await send_auto_delete(ctx, TEXTS["permission_denied"], ephemeral=True)
             return
 
-        self.log_command_use(ctx, "deletedg")
+        self.log_command_use(ctx, "gdelete")
 
         gid, g = self._get_giveaway(giveaway_id)
         if not g:
@@ -698,15 +698,15 @@ class Giveaway(commands.Cog):
         else:
             await send_auto_delete(ctx, TEXTS["giveaway_not_found"].format(gid=giveaway_id), ephemeral=True)
 
-    @commands.hybrid_command(name="rerollg", description="Retirer les gagnants (Reroll a giveaway)")
+    @commands.hybrid_command(name="greroll", description="Retirer les gagnants (Reroll a giveaway)")
     @app_commands.describe(giveaway_id="ID du giveaway")
-    async def rerollg_slash(self, ctx: commands.Context, giveaway_id: str):
+    async def greroll_slash(self, ctx: commands.Context, giveaway_id: str):
         """Effectue un nouveau tirage parmi les participants d'un giveaway terminé."""
-        if not await self.check_permission(ctx, "rerollg"):
+        if not await self.check_permission(ctx, "greroll"):
             await send_auto_delete(ctx, TEXTS["permission_denied"], ephemeral=True)
             return
 
-        self.log_command_use(ctx, "rerollg")
+        self.log_command_use(ctx, "greroll")
 
         gid, g = self._get_giveaway(giveaway_id)
         if not g:
