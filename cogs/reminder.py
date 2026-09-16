@@ -8,7 +8,9 @@ from discord.ext import commands, tasks
 
 from settings import (
     TEXTS, CUSTOM_EMOJIS,
-    REMINDERS_FILE, DATA_DIR
+    REMINDERS_FILE, DATA_DIR,
+    DISBOARD_BOT_ID, BUMP_REMINDER_ENABLED, BUMP_REMINDER_DELAY_SECONDS,
+    BUMP_REMINDER_ROLE_ID, BUMP_SUCCESS_PHRASES, BUMP_REMINDERS_FILE
 )
 from cogs.base import send_auto_delete
 from cogs.giveaway import parse_duration
@@ -43,6 +45,33 @@ def save_reminders(data: dict) -> None:
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
     os.replace(tmp, REMINDERS_FILE)
+
+
+# --- STOCKAGE RAPPELS BUMP DISBOARD (one-shot) ---
+
+_bump_lock = asyncio.Lock()
+
+
+def load_bump_reminders() -> dict:
+    """Charge les rappels de bump : {guild_id: trigger_iso} (état vide si corrompu)."""
+    if os.path.exists(BUMP_REMINDERS_FILE):
+        try:
+            with open(BUMP_REMINDERS_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
+        except (IOError, json.JSONDecodeError):
+            pass
+    return {}
+
+
+def save_bump_reminders(data: dict) -> None:
+    """Sauvegarde atomique des rappels de bump."""
+    os.makedirs(DATA_DIR, exist_ok=True)
+    tmp = BUMP_REMINDERS_FILE + ".tmp"
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+    os.replace(tmp, BUMP_REMINDERS_FILE)
 
 
 def format_interval(td: timedelta) -> str:
@@ -231,9 +260,13 @@ class Reminder(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.check_reminders.start()
+        if BUMP_REMINDER_ENABLED:
+            self.check_bump_reminders.start()
 
     def cog_unload(self):
         self.check_reminders.cancel()
+        if BUMP_REMINDER_ENABLED:
+            self.check_bump_reminders.cancel()
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -504,6 +537,120 @@ class Reminder(commands.Cog):
     @check_reminders.before_loop
     async def before_check(self):
         await self.bot.wait_until_ready()
+
+    # --- DISBOARD : RAPPEL AUTOMATIQUE APRÈS UN BUMP RÉUSSI ---
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        """Détecte un bump Disboard RÉUSSI et programme un rappel 2h plus tard.
+
+        Un bump réussi = message du bot Disboard contenant une phrase de succès
+        ("Bump effectué" / "Bump done"). Un bump refusé (cooldown) a un contenu
+        différent ("attendez X minutes") et ne déclenche donc rien.
+        """
+        if not BUMP_REMINDER_ENABLED or not message.guild:
+            return
+        if message.author.id != DISBOARD_BOT_ID:
+            return
+
+        content = (message.content or "").lower()
+        if not any(phrase in content for phrase in BUMP_SUCCESS_PHRASES):
+            return  # bump refusé ou message autre → pas de rappel
+
+        await self.schedule_bump_reminder(message.channel)
+
+    async def schedule_bump_reminder(self, channel) -> None:
+        """Programme le rappel de bump pour ce serveur (1 seul en attente par guilde)."""
+        trigger = (datetime.now(timezone.utc)
+                   + timedelta(seconds=BUMP_REMINDER_DELAY_SECONDS)).isoformat()
+        async with _bump_lock:
+            data = load_bump_reminders()
+            gid = str(channel.guild.id)
+            if gid in data:
+                return  # un rappel de bump est déjà en attente pour ce serveur
+            data[gid] = {"trigger": trigger, "channel_id": channel.id}
+            save_bump_reminders(data)
+
+        # Log de programmation #L104
+        logs_cog = self.bot.get_cog('Logs')
+        log_channel = logs_cog._get_log_channel("action") if logs_cog else None
+        if log_channel:
+            try:
+                embed = discord.Embed(color=discord.Color(int("00B0F0", 16)))  # Bleu
+                embed.description = (
+                    f'{CUSTOM_EMOJIS["info"]} **{TEXTS["bump_reminder_log_title"]}**\n'
+                    f'{TEXTS["bump_reminder_log_desc"]}'
+                )
+                embed.add_field(
+                    name=TEXTS["reminder_trigger_field"],
+                    value=f"<t:{int(datetime.now(timezone.utc).timestamp()) + BUMP_REMINDER_DELAY_SECONDS}:R>",
+                    inline=False
+                )
+                embed.set_footer(
+                    text=f'{_log_id_for("bump_reminder")} • {get_timestamp()}'
+                )
+                await log_channel.send(embed=embed)
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+
+    @tasks.loop(seconds=10)
+    async def check_bump_reminders(self):
+        """Vérifie les rappels de bump arrivés à échéance (one-shot : supprimés après envoi)."""
+        try:
+            data = load_bump_reminders()
+            now = datetime.now(timezone.utc)
+            for gid, info in list(data.items()):
+                try:
+                    trigger = datetime.fromisoformat(info["trigger"])
+                except (KeyError, ValueError, TypeError):
+                    async with _bump_lock:
+                        current = load_bump_reminders()
+                        current.pop(gid, None)
+                        save_bump_reminders(current)
+                    continue
+
+                if trigger > now:
+                    continue
+
+                # Retirer AVANT l'envoi (évite les envois en boucle si échec)
+                async with _bump_lock:
+                    current = load_bump_reminders()
+                    current.pop(gid, None)
+                    save_bump_reminders(current)
+
+                await self.send_bump_reminder(int(gid), info.get("channel_id"))
+        except Exception as e:
+            print(f"❌ Erreur loop bump reminder: {e}")
+
+    @check_bump_reminders.before_loop
+    async def before_check_bump(self):
+        await self.bot.wait_until_ready()
+
+    async def send_bump_reminder(self, guild_id: int, channel_id: int) -> None:
+        """Envoie le rappel de rebump dans le salon du bump."""
+        guild = self.bot.get_guild(guild_id)
+        if not guild:
+            return
+        channel = guild.get_channel(channel_id)
+        if not channel:
+            return
+
+        content = f"<@&{BUMP_REMINDER_ROLE_ID}>" if BUMP_REMINDER_ROLE_ID else None
+        embed = discord.Embed(color=discord.Color(int("00B0F0", 16)))  # Bleu
+        embed.description = (
+            f'{CUSTOM_EMOJIS["info"]} **{TEXTS["bump_reminder_title"]}**\n'
+            f'{TEXTS["bump_reminder_desc"]}'
+        )
+        embed.set_footer(text=f'{_log_id_for("bump_reminder")} • {get_timestamp()}')
+
+        try:
+            await channel.send(
+                content=content,
+                embed=embed,
+                allowed_mentions=discord.AllowedMentions(roles=True, everyone=False)
+            )
+        except (discord.Forbidden, discord.HTTPException) as e:
+            print(f"❌ Envoi rappel bump impossible (guilde {guild_id}) : {e}")
 
     # --- COMMANDES ---
 

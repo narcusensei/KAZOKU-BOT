@@ -16,6 +16,7 @@ Bot Discord du serveur **K4ZOKU** — modération, logs avancés, giveaways et r
 | 📋 **Logs** | Journalisation ultra-complète du serveur en embeds enrichis |
 | 🎁 **Giveaways** | Création, gestion et reroll de cadeaux avec boutons |
 | ⏰ **Rappels** | Rappels automatiques personnalisés avec suivi persistant |
+| 🚀 **Disboard** | Rappel automatique 2h après chaque bump réussi (`/bump`) |
 
 ### 📋 Logs couverts
 
@@ -70,6 +71,8 @@ Préfixe : `+` (les commandes existent aussi en slash commands `/`)
 |---|---|
 | `+reminder` | Créer un rappel via formulaire (message, salon, date/heure) |
 | `+reminderlist` | Liste interactive des rappels |
+
+> 💡 **Disboard** : quand le bot Disboard confirme un `/bump` réussi, un rappel de rebump est automatiquement programmé **2h plus tard** dans le même salon. Les bumps refusés (cooldown) ne déclenchent rien. Configurable dans `settings.py` (`BUMP_REMINDER_*`, `BUMP_REMINDER_ROLE_ID` pour mentionner un rôle).
 
 ## ⚙️ Installation
 

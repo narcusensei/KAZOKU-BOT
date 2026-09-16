@@ -786,6 +786,10 @@ TEXTS = {
     "reminder_role_invalid":            "ID de rôle invalide ou rôle introuvable.",
     "reminder_created_ok":              "✅ Rappel créé !",
     "reminder_create_error":            "❌ Erreur lors de la création du rappel.",
+    "bump_reminder_title":              "REBUMP DISPONIBLE",
+    "bump_reminder_desc":               "Le serveur peut être bumpé à nouveau sur Disboard ! Tape `/bump` dans ce salon 🚀",
+    "bump_reminder_log_title":          "RAPPEL BUMP PROGRAMMÉ",
+    "bump_reminder_log_desc":           "Un bump Disboard a été détecté, rappel programmé dans 2h",
 
     # --- Logs : rôles serveur ---
     "role_created_title":               "RÔLE CRÉÉ",
@@ -1016,6 +1020,24 @@ WARNINGS_FILE = "data/warnings.json"
 MEMBERS_FILE = "data/members.json"
 GIVEAWAYS_FILE = "data/giveaways.json"
 REMINDERS_FILE = "data/reminders.json"
+BUMP_REMINDERS_FILE = "data/bump_reminders.json"
+
+
+# ================ DISBOARD / BUMP ===========================
+
+# ID du bot officiel Disboard (ne pas modifier)
+DISBOARD_BOT_ID = 302050872383242240
+
+# Rappel automatique après un bump réussi
+BUMP_REMINDER_ENABLED = True
+BUMP_REMINDER_DELAY_SECONDS = 2 * 3600   # 2 heures après le bump
+
+# Rôle mentionné par le rappel de bump (None = aucune mention)
+BUMP_REMINDER_ROLE_ID = None
+
+# Phrases de succès du bot Disboard (FR/EN). Un message de Disboard qui
+# ne contient AUCUNE de ces phrases = bump refusé (cooldown) → pas de rappel.
+BUMP_SUCCESS_PHRASES = ["bump effectué", "bump done"]
 
 
 # ============= LOG TYPE IDS ==================================
@@ -1153,6 +1175,9 @@ LOG_TYPE_IDS = {
     # --- Sanctions suppression (#L102 - #L103) ---
     "sanction_delete":       102,
     "sanction_delete_all":   103,
+
+    # --- Disboard (#L104) ---
+    "bump_reminder":         104,
 
     # --- Invitations (#L56 - #L57) ---
     "invite_create":          56,
