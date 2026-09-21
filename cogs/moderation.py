@@ -633,8 +633,11 @@ class Moderation(commands.Cog):
             if user:
                 deleted = await self._clear_user_messages(ctx, user, amount)
             else:
-                deleted = await ctx.channel.purge(limit=amount)
-                deleted = len(deleted)
+                # En préfixe (+clear), le message de commande fait partie de la
+                # purge : on le compense pour supprimer `amount` vrais messages.
+                extra = 0 if ctx.interaction else 1
+                deleted = await ctx.channel.purge(limit=amount + extra)
+                deleted = len(deleted) - extra
 
             await send_auto_delete(ctx,TEXTS["clear_success"].format(n=deleted), ephemeral=True)
         except (discord.Forbidden, discord.HTTPException):
