@@ -1033,7 +1033,7 @@ BUMP_REMINDER_ENABLED = True
 BUMP_REMINDER_DELAY_SECONDS = 2 * 3600   # 2 heures après le bump
 
 # Rôle mentionné par le rappel de bump (None = aucune mention)
-BUMP_REMINDER_ROLE_ID = None
+BUMP_REMINDER_ROLE_ID = 1245086170271191164
 
 # Phrases de succès du bot Disboard (FR/EN). Un message de Disboard qui
 # ne contient AUCUNE de ces phrases = bump refusé (cooldown) → pas de rappel.
