@@ -107,8 +107,34 @@ async def load_cogs(bot: commands.Bot) -> None:
             print(f"❌ Erreur lors du chargement de '{cog}' : {e}")
 
 
+def acquire_single_instance_lock() -> None:
+    """Empêche deux instances du bot sur la même machine.
+
+    Un verrou fichier est posé au démarrage (Linux uniquement, via fcntl).
+    Si une autre instance tourne déjà, celle-ci refuse de démarrer :
+    évite les doublons de logs / commandes exécutées deux fois (le service
+    systemd est la seule façon normale de lancer le bot).
+    """
+    if os.name != "posix":
+        return
+    import fcntl
+    import sys
+
+    lock_path = "/tmp/k4zkbot.lock"
+    lock_file = open(lock_path, "w")
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        sys.exit(
+            "🛑 Une autre instance du bot tourne déjà sur cette machine.\n"
+            "   Utilisez : sudo systemctl restart k4zkbot"
+        )
+
+
 async def main() -> None:
     """Fonction principale de démarrage du bot."""
+    acquire_single_instance_lock()
+
     token = os.getenv(TOKEN_ENV_VAR)
     if not token:
         raise ValueError(DEFAULT_TOKEN_ERROR)
