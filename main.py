@@ -107,6 +107,10 @@ async def load_cogs(bot: commands.Bot) -> None:
             print(f"❌ Erreur lors du chargement de '{cog}' : {e}")
 
 
+# Référence globale : si le fichier est fermé (garbage collector), le verrou saute
+_INSTANCE_LOCK_FILE = None
+
+
 def acquire_single_instance_lock() -> None:
     """Empêche deux instances du bot sur la même machine.
 
@@ -115,15 +119,16 @@ def acquire_single_instance_lock() -> None:
     évite les doublons de logs / commandes exécutées deux fois (le service
     systemd est la seule façon normale de lancer le bot).
     """
+    global _INSTANCE_LOCK_FILE
     if os.name != "posix":
         return
     import fcntl
     import sys
 
     lock_path = "/tmp/k4zkbot.lock"
-    lock_file = open(lock_path, "w")
+    _INSTANCE_LOCK_FILE = open(lock_path, "w")
     try:
-        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(_INSTANCE_LOCK_FILE, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         sys.exit(
             "🛑 Une autre instance du bot tourne déjà sur cette machine.\n"
