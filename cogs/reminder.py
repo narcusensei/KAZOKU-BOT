@@ -553,7 +553,14 @@ class Reminder(commands.Cog):
         if message.author.id != DISBOARD_BOT_ID:
             return
 
+        # Disboard répond dans un embed (description), pas dans le contenu
         content = (message.content or "").lower()
+        for embed in message.embeds:
+            if embed.title:
+                content += " " + embed.title.lower()
+            if embed.description:
+                content += " " + embed.description.lower()
+
         if not any(phrase in content for phrase in BUMP_SUCCESS_PHRASES):
             return  # bump refusé ou message autre → pas de rappel
 
