@@ -791,6 +791,25 @@ TEXTS = {
     "bump_reminder_log_title":          "RAPPEL BUMP PROGRAMMÉ",
     "bump_reminder_log_desc":           "Un bump Disboard a été détecté, rappel programmé dans 2h",
 
+    # --- Embed personnalisé ---
+    "embed_form_title":                 "Créer un Embed",
+    "embed_form_title_label":           "Titre (Optionnel)",
+    "embed_form_desc_label":            "Description",
+    "embed_form_color_label":           "Couleur hex (ex: #FF0000)",
+    "embed_form_image_label":           "Image URL .png/.jpg (Optionnel)",
+    "embed_form_image_placeholder":     "https://exemple.com/image.png",
+    "embed_form_footer_label":          "Pied de page (Optionnel)",
+    "embed_form_image_type":            "Type d'image",
+    "embed_sent_ok":                    "✅ Embed envoyé !",
+    "embed_send_error":                 "❌ Impossible d'envoyer l'embed.",
+    "embed_color_invalid":              "❌ Couleur invalide. Format attendu : code hexadécimal à 6 chiffres (ex: `#FF0000`).",
+    "embed_image_invalid":              "❌ URL d'image invalide. Fournis une URL directe vers un fichier `.png`, `.jpg` ou `.jpeg`.",
+    "embed_open_form":                  "Clique sur le bouton pour ouvrir le formulaire de création :",
+    "embed_log_title":                  "EMBED PERSONNALISÉ CRÉÉ",
+    "embed_log_desc":                   "Un embed personnalisé a été publié",
+    "embed_log_title_field":            "Titre",
+    "embed_log_no_title":               "(sans titre)",
+
     # --- Logs : rôles serveur ---
     "role_created_title":               "RÔLE CRÉÉ",
     "role_deleted_title":               "RÔLE SUPPRIMÉ",
@@ -1007,7 +1026,10 @@ PERMISSIONS = {
 
     # Rappels
     "reminder":      ["+", "~"],
-    "reminderlist":  ["+", "~"]
+    "reminderlist":  ["+", "~"],
+
+    # Outils
+    "embed":         ["+", "~"]
 }
 
 SANCTION_TYPES = ["Ban", "Kick", "Mute", "Avertissement"]
@@ -1178,6 +1200,9 @@ LOG_TYPE_IDS = {
 
     # --- Disboard (#L104) ---
     "bump_reminder":         104,
+
+    # --- Embeds personnalisés (#L105) ---
+    "embed_create":          105,
 
     # --- Invitations (#L56 - #L57) ---
     "invite_create":          56,

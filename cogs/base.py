@@ -3,6 +3,7 @@
 
 import discord
 import asyncio
+import re
 from discord import app_commands
 from discord.ext import commands
 from typing import Optional
@@ -67,6 +68,148 @@ async def send_auto_delete(ctx, content=None, **kwargs):
     if kwargs.get('ephemeral') and ctx.interaction is None:
         await message.delete(delay=15)
     return message
+
+
+# --- MODAL DE CRÉATION D'EMBED ---
+
+EMBED_DEFAULT_COLOR = "B821FF"  # Violet (identité du bot)
+
+class EmbedModal(discord.ui.Modal, title=TEXTS["embed_form_title"]):
+    """Formulaire interactif de création d'embed personnalisé."""
+
+    title_input = discord.ui.TextInput(
+        label=TEXTS["embed_form_title_label"],
+        max_length=256,
+        required=False
+    )
+    desc_input = discord.ui.TextInput(
+        label=TEXTS["embed_form_desc_label"],
+        style=discord.TextStyle.paragraph,
+        max_length=4000,
+        required=True
+    )
+    color_input = discord.ui.TextInput(
+        label=TEXTS["embed_form_color_label"],
+        placeholder="#FF0000",
+        max_length=7,
+        required=False
+    )
+    image_input = discord.ui.TextInput(
+        label=TEXTS["embed_form_image_label"],
+        placeholder=TEXTS["embed_form_image_placeholder"],
+        max_length=500,
+        required=False
+    )
+    footer_input = discord.ui.TextInput(
+        label=TEXTS["embed_form_footer_label"],
+        max_length=256,
+        required=False
+    )
+    image_type_select = discord.ui.Select(
+        placeholder=TEXTS["embed_form_image_type"],
+        options=[
+            discord.SelectOption(label="Grande image", value="image", default=True),
+            discord.SelectOption(label="Miniature", value="thumbnail"),
+        ],
+        min_values=1,
+        max_values=1
+    )
+
+    def __init__(self, cog, authorized_user_id: int):
+        super().__init__()
+        self.cog = cog
+        self.authorized_user_id = authorized_user_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        # Re-vérification de la permission (seul l'auteur de la commande peut soumettre)
+        if interaction.user.id != self.authorized_user_id:
+            await interaction.response.send_message(TEXTS["permission_denied"], ephemeral=True)
+            return
+
+        # Validation de la couleur (hex 6 chiffres, # optionnel, violet par défaut)
+        color_raw = str(self.color_input).strip() if self.color_input.value else ""
+        if color_raw:
+            match = re.fullmatch(r'#?([0-9a-fA-F]{6})', color_raw)
+            if not match:
+                await interaction.response.send_message(TEXTS["embed_color_invalid"], ephemeral=True)
+                return
+            color = discord.Color(int(match.group(1), 16))
+        else:
+            color = discord.Color(int(EMBED_DEFAULT_COLOR, 16))
+
+        # Validation de l'URL d'image (directe, .png/.jpg/.jpeg)
+        image_url = str(self.image_input).strip() if self.image_input.value else ""
+        if image_url and not re.fullmatch(r'https?://\S+\.(?:png|jpe?g)(?:\?\S*)?', image_url, re.IGNORECASE):
+            await interaction.response.send_message(TEXTS["embed_image_invalid"], ephemeral=True)
+            return
+
+        # Construction de l'embed
+        embed = discord.Embed(color=color, description=str(self.desc_input).strip())
+        if self.title_input.value:
+            embed.title = str(self.title_input).strip()
+        if self.footer_input.value:
+            embed.set_footer(text=str(self.footer_input).strip())
+        if image_url:
+            if self.image_type_select.values and self.image_type_select.values[0] == "thumbnail":
+                embed.set_thumbnail(url=image_url)
+            else:
+                embed.set_image(url=image_url)
+
+        # Publication dans le channel de la commande
+        await interaction.response.defer(ephemeral=True)
+        try:
+            await interaction.channel.send(embed=embed)
+        except (discord.Forbidden, discord.HTTPException):
+            await interaction.followup.send(TEXTS["embed_send_error"], ephemeral=True)
+            return
+        await interaction.followup.send(TEXTS["embed_sent_ok"], ephemeral=True)
+
+        # Log #L105 dans le channel action
+        logs_cog = self.cog.bot.get_cog('Logs')
+        if not logs_cog:
+            return
+        log_channel = logs_cog._get_log_channel("action")
+        if not log_channel:
+            return
+        try:
+            log_embed = discord.Embed(color=discord.Color(int(EMBED_DEFAULT_COLOR, 16)))  # Violet
+            log_embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
+            log_embed.description = (
+                f'{CUSTOM_EMOJIS["info"]} **{TEXTS["embed_log_title"]}**\n'
+                f'{TEXTS["embed_log_desc"]}'
+            )
+            title_display = embed.title or TEXTS["embed_log_no_title"]
+            log_embed.add_field(name=TEXTS["embed_log_title_field"], value=truncate_text(title_display, 1000), inline=False)
+            log_embed.add_field(name=TEXTS["member_by"], value=interaction.user.mention, inline=False)
+            log_embed.add_field(name=TEXTS["channel_field"], value=interaction.channel.mention, inline=False)
+            log_embed.set_footer(text=logs_cog._footer("embed_create", interaction.user.id))
+            await log_channel.send(embed=log_embed)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+
+
+# --- BOUTON OUVRIR LE FORMULAIRE (préfixe) ---
+
+class EmbedOpenFormView(discord.ui.View):
+    """Vue avec un bouton ouvrant le modal (usage préfixe)."""
+
+    def __init__(self, cog, authorized_user_id: int):
+        super().__init__(timeout=120)
+        self.cog = cog
+        self.authorized_user_id = authorized_user_id
+
+    @discord.ui.button(label="📝 Ouvrir le formulaire", style=discord.ButtonStyle.primary)
+    async def open_form(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.authorized_user_id:
+            await interaction.response.send_message(TEXTS["permission_denied"], ephemeral=True)
+            return
+        await interaction.response.send_modal(
+            EmbedModal(self.cog, self.authorized_user_id)
+        )
+        try:
+            await interaction.message.delete()
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            pass
 
 
 # --- COG BASE ---
@@ -135,6 +278,7 @@ class Base(commands.Cog):
             "**Profile User** - `/profil ou +profil [user]`\n"
             "**Info** - `/info ou +info`\n"
             "**Sync** - `/sync ou +sync`\n"
+            "**Embed** - `/embed ou +embed`\n"
             "━━━━━━━ 🔨 **MODÉRATION** ━━━━━━━\n"
             "**Supprimer Message** - `/clear ou +clear 50 [user]`\n"
             "**Mute** - `/mute ou +mute [user] [raison] [h] [m] [s]`\n"
@@ -237,6 +381,36 @@ class Base(commands.Cog):
         except (discord.Forbidden, discord.HTTPException) as e:
             print(f"{UNICODE_EMOJIS['cross']} Erreur Sync : {e}")
             await send_auto_delete(ctx,f"{UNICODE_EMOJIS['cross']} {TEXTS['sync_error']}")
+
+    @commands.hybrid_command(name="embed", description="Créer un embed personnalisé (Create a custom embed)")
+    async def embed_slash(self, ctx: commands.Context):
+        """Ouvre le formulaire de création d'embed personnalisé."""
+        # Check guild EN PREMIER (check_permission accède à guild.owner_id)
+        if ctx.guild is None:
+            await send_auto_delete(ctx, "❌ Cette commande doit être utilisée dans un serveur.", ephemeral=True)
+            return
+
+        # Vérification de permission (fail-closed : refuser si le cog Moderation est absent)
+        mod_cog = self.bot.get_cog('Moderation')
+        if not mod_cog or not await mod_cog.check_permission(ctx, "embed"):
+            await send_auto_delete(ctx, TEXTS["permission_denied"], ephemeral=True)
+            return
+
+        # Log de l'utilisation de la commande (+embed ou /embed selon le mode)
+        logs_cog = self.bot.get_cog('Logs')
+        if logs_cog:
+            prefix = "+" if ctx.interaction is None else "/"
+            asyncio.create_task(logs_cog.log_command_use("embed", ctx.author, prefix))
+
+        if ctx.interaction is not None:
+            await ctx.interaction.response.send_modal(
+                EmbedModal(self, ctx.author.id)
+            )
+        else:
+            await ctx.send(
+                f'{CUSTOM_EMOJIS["info"]} {TEXTS["embed_open_form"]}',
+                view=EmbedOpenFormView(self, ctx.author.id)
+            )
 
 
 async def setup(bot):

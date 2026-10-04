@@ -583,7 +583,7 @@ class Reminder(commands.Cog):
         log_channel = logs_cog._get_log_channel("action") if logs_cog else None
         if log_channel:
             try:
-                embed = discord.Embed(color=discord.Color(int("00B0F0", 16)))  # Bleu
+                embed = discord.Embed(color=discord.Color(int("B821FF", 16)))  # Violet
                 embed.description = (
                     f'{CUSTOM_EMOJIS["info"]} **{TEXTS["bump_reminder_log_title"]}**\n'
                     f'{TEXTS["bump_reminder_log_desc"]}'
@@ -643,7 +643,7 @@ class Reminder(commands.Cog):
             return
 
         content = f"<@&{BUMP_REMINDER_ROLE_ID}>" if BUMP_REMINDER_ROLE_ID else None
-        embed = discord.Embed(color=discord.Color(int("00B0F0", 16)))  # Bleu
+        embed = discord.Embed(color=discord.Color(int("B821FF", 16)))  # Violet
         embed.description = (
             f'{CUSTOM_EMOJIS["info"]} **{TEXTS["bump_reminder_title"]}**\n'
             f'{TEXTS["bump_reminder_desc"]}'
