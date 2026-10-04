@@ -105,15 +105,6 @@ class EmbedModal(discord.ui.Modal, title=TEXTS["embed_form_title"]):
         max_length=256,
         required=False
     )
-    image_type_select = discord.ui.Select(
-        placeholder=TEXTS["embed_form_image_type"],
-        options=[
-            discord.SelectOption(label="Grande image", value="image", default=True),
-            discord.SelectOption(label="Miniature", value="thumbnail"),
-        ],
-        min_values=1,
-        max_values=1
-    )
 
     def __init__(self, cog, authorized_user_id: int):
         super().__init__()
@@ -137,8 +128,11 @@ class EmbedModal(discord.ui.Modal, title=TEXTS["embed_form_title"]):
         else:
             color = discord.Color(int(EMBED_DEFAULT_COLOR, 16))
 
-        # Validation de l'URL d'image (directe, .png/.jpg/.jpeg)
-        image_url = str(self.image_input).strip() if self.image_input.value else ""
+        # Validation de l'URL d'image (directe, .png/.jpg/.jpeg).
+        # Préfixe "mini:" pour afficher en miniature au lieu de grande image.
+        image_raw = str(self.image_input).strip() if self.image_input.value else ""
+        is_thumbnail = image_raw.lower().startswith("mini:")
+        image_url = image_raw[5:].strip() if is_thumbnail else image_raw
         if image_url and not re.fullmatch(r'https?://\S+\.(?:png|jpe?g)(?:\?\S*)?', image_url, re.IGNORECASE):
             await interaction.response.send_message(TEXTS["embed_image_invalid"], ephemeral=True)
             return
@@ -150,7 +144,7 @@ class EmbedModal(discord.ui.Modal, title=TEXTS["embed_form_title"]):
         if self.footer_input.value:
             embed.set_footer(text=str(self.footer_input).strip())
         if image_url:
-            if self.image_type_select.values and self.image_type_select.values[0] == "thumbnail":
+            if is_thumbnail:
                 embed.set_thumbnail(url=image_url)
             else:
                 embed.set_image(url=image_url)
