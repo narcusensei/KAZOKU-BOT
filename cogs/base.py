@@ -128,12 +128,13 @@ class EmbedModal(discord.ui.Modal, title=TEXTS["embed_form_title"]):
         else:
             color = discord.Color(int(EMBED_DEFAULT_COLOR, 16))
 
-        # Validation de l'URL d'image (directe, .png/.jpg/.jpeg).
+        # Validation de l'URL d'image : n'importe quelle URL http(s) directe
+        # (avec ou sans extension — c'est Discord qui fait le rendu).
         # Préfixe "mini:" pour afficher en miniature au lieu de grande image.
         image_raw = str(self.image_input).strip() if self.image_input.value else ""
         is_thumbnail = image_raw.lower().startswith("mini:")
         image_url = image_raw[5:].strip() if is_thumbnail else image_raw
-        if image_url and not re.fullmatch(r'https?://\S+\.(?:png|jpe?g)(?:\?\S*)?', image_url, re.IGNORECASE):
+        if image_url and not re.fullmatch(r'https?://\S+', image_url):
             await interaction.response.send_message(TEXTS["embed_image_invalid"], ephemeral=True)
             return
 
