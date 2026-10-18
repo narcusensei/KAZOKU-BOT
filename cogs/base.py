@@ -138,12 +138,17 @@ class EmbedModal(discord.ui.Modal, title=TEXTS["embed_form_title"]):
             await interaction.response.send_message(TEXTS["embed_image_invalid"], ephemeral=True)
             return
 
-        # Construction de l'embed
+        # Construction de l'embed — identité du bot par défaut (author + footer copyright)
+        from cogs.logs import get_timestamp
+        bot_user = self.cog.bot.user
         embed = discord.Embed(color=color, description=str(self.desc_input).strip())
+        embed.set_author(name=bot_user.display_name, icon_url=bot_user.display_avatar.url)
         if self.title_input.value:
             embed.title = str(self.title_input).strip()
         if self.footer_input.value:
-            embed.set_footer(text=str(self.footer_input).strip())
+            embed.set_footer(text=str(self.footer_input).strip(), icon_url=bot_user.display_avatar.url)
+        else:
+            embed.set_footer(text=f"{BOT_FOOTER} • {get_timestamp()}", icon_url=bot_user.display_avatar.url)
         if image_url:
             if is_thumbnail:
                 embed.set_thumbnail(url=image_url)
