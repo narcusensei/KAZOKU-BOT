@@ -70,6 +70,58 @@ async def send_auto_delete(ctx, content=None, **kwargs):
     return message
 
 
+# --- CONVERSION SHORTCODES EMOJI ---
+# Les champs de modal ne convertissent pas ":tada:" en émoji (contrairement au
+# chat), on le fait nous-mêmes. Dégradation gracieuse si la lib est absente.
+
+try:
+    import emoji as emoji_lib
+except ImportError:
+    emoji_lib = None
+
+def emojize_text(text: str) -> str:
+    """Convertit les shortcodes :emoji: en émojis réels (les shortcodes inconnus restent intacts)."""
+    if emoji_lib and text:
+        return emoji_lib.emojize(text, language='alias')
+    return text
+
+
+# Markup <:nom:ID> déjà présent dans le texte (à préserver tel quel)
+_EXISTING_CUSTOM_EMOJI_RE = re.compile(r'<a?:[a-zA-Z0-9_]{2,32}:\d{5,}>')
+
+def process_emoji_text(text: str, guild) -> str:
+    """Convertit les shortcodes :emoji: — Unicode ET émojis personnalisés du serveur.
+
+    Les <:nom:ID> déjà présents dans le texte sont masqués avant conversion
+    pour ne pas être corrompus (ex. ":smile:" existe aussi en Unicode).
+    """
+    if not text:
+        return text
+
+    protected = {}
+    def stash(m):
+        token = f'\x00{len(protected)}\x00'
+        protected[token] = m.group(0)
+        return token
+    text = _EXISTING_CUSTOM_EMOJI_RE.sub(stash, text)
+
+    text = emojize_text(text)
+
+    # Shortcodes des émojis du serveur :nom: → <:nom:ID>
+    if guild and guild.emojis:
+        mapping = {e.name.lower(): str(e) for e in guild.emojis}
+        if mapping:
+            text = re.sub(
+                r':([a-zA-Z0-9_]{2,32}):',
+                lambda m: mapping.get(m.group(1).lower(), m.group(0)),
+                text
+            )
+
+    for token, original in protected.items():
+        text = text.replace(token, original)
+    return text
+
+
 # --- MODAL DE CRÉATION D'EMBED ---
 
 EMBED_DEFAULT_COLOR = "B821FF"  # Violet (identité du bot)
@@ -141,14 +193,15 @@ class EmbedModal(discord.ui.Modal, title=TEXTS["embed_form_title"]):
         # Construction de l'embed — identité du bot par défaut (author + footer copyright)
         from cogs.logs import get_timestamp
         bot_user = self.cog.bot.user
-        embed = discord.Embed(color=color, description=str(self.desc_input).strip())
+        guild = interaction.guild
+        embed = discord.Embed(color=color, description=process_emoji_text(str(self.desc_input).strip(), guild))
         embed.set_author(name=bot_user.display_name, icon_url=bot_user.display_avatar.url)
         if self.title_input.value:
-            embed.title = str(self.title_input).strip()
+            embed.title = process_emoji_text(str(self.title_input).strip(), guild)
         if self.footer_input.value:
-            embed.set_footer(text=str(self.footer_input).strip(), icon_url=bot_user.display_avatar.url)
+            embed.set_footer(text=process_emoji_text(str(self.footer_input).strip(), guild))
         else:
-            embed.set_footer(text=f"{BOT_FOOTER} • {get_timestamp()}", icon_url=bot_user.display_avatar.url)
+            embed.set_footer(text=f"{BOT_FOOTER} • {get_timestamp()}")
         if image_url:
             if is_thumbnail:
                 embed.set_thumbnail(url=image_url)
