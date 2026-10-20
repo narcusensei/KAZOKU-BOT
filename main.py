@@ -9,6 +9,27 @@ import discord
 from discord.ext import commands
 from settings import BOT_PREFIX, BOT_ACTIVITY_TYPE, BOT_ACTIVITY_NAME, TOKEN_ENV_VAR
 
+# --- ROBUSTESSE HTTP (crucial sur la VM Oracle) ---
+# discord.py réutilise les connexions TCP de son pool (keep-alive). Quand Discord
+# ou le NAT du cloud clôt une connexion devenue inactive, la requête REST suivante
+# part sur ce socket mort et attend indéfiniment une réponse qui n'arrivera
+# jamais : la log pend alors que le websocket (connexion séparée, vivante)
+# continue de fonctionner — le bot paraît opérationnel mais ne logge plus rien.
+# On force donc une connexion neuve par requête REST (force_close) et le
+# nettoyage des sockets SSL fermées (enable_cleanup_closed). Le coût (~100ms de
+# poignée de main TLS par appel) est négligeable pour un bot de logging.
+# Le websocket de la gateway est une connexion dédiée, non concernée.
+import aiohttp as _aiohttp
+
+_orig_tcp_connector_init = _aiohttp.TCPConnector.__init__
+
+def _tcp_connector_force_close(self, *args, **kwargs):
+    kwargs.setdefault('force_close', True)
+    kwargs.setdefault('enable_cleanup_closed', True)
+    _orig_tcp_connector_init(self, *args, **kwargs)
+
+_aiohttp.TCPConnector.__init__ = _tcp_connector_force_close
+
 # --- CONSTANTES LOCALES ---
 DEFAULT_TOKEN_ERROR = "❌ Token manquant dans le fichier .env"
 
