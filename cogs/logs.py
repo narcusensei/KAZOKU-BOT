@@ -1115,10 +1115,19 @@ class Logs(commands.Cog):
                   f"(non caché par le bot ? envoyé avant le démarrage ?)", file=sys.stderr)
             return
 
-        deleted_by = await self._get_moderator_from_audit_log(
-            message.guild, message.author.id,
-            [discord.AuditLogAction.message_delete]
-        )
+        print("🔍 [DEBUG-DELETE] avant appel audit log...", file=sys.stderr)
+        try:
+            deleted_by = await asyncio.wait_for(
+                self._get_moderator_from_audit_log(
+                    message.guild, message.author.id,
+                    [discord.AuditLogAction.message_delete]
+                ),
+                timeout=15
+            )
+        except asyncio.TimeoutError:
+            print("⏱️ [DEBUG-DELETE] audit log bloquée (timeout 15s), poursuite sans modérateur", file=sys.stderr)
+            deleted_by = None
+        print(f"🔍 [DEBUG-DELETE] après audit : {deleted_by}", file=sys.stderr)
         if deleted_by and deleted_by.id == message.author.id:
             deleted_by = None
 
