@@ -1034,10 +1034,12 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_message_delete(self, message):
         """Se déclenche lors d'une suppression manuelle."""
+        print(f"🔍 [DEBUG-DELETE] événement reçu : message {message.id} dans {message.channel}")
         if not message.guild:
             return
         channel = self._get_log_channel("message")
         if not channel:
+            print("🔍 [DEBUG-DELETE] sortie : channel 'message' introuvable (LOG_CHANNELS)")
             return
 
         # Log sondage supprimé
@@ -1104,13 +1106,14 @@ class Logs(commands.Cog):
 
         # Log message classique supprimé
         if not message.content and not message.attachments:
+            print(f"🔍 [DEBUG-DELETE] sortie : message {message.id} sans contenu ni pièce jointe "
+                  f"(non caché par le bot ? envoyé avant le démarrage ?)")
             return
 
         deleted_by = await self._get_moderator_from_audit_log(
             message.guild, message.author.id,
             [discord.AuditLogAction.message_delete]
         )
-
         if deleted_by and deleted_by.id == message.author.id:
             deleted_by = None
 
@@ -1133,7 +1136,11 @@ class Logs(commands.Cog):
         if deleted_by:
             embed.add_field(name=TEXTS["message_deleted_by"], value=deleted_by.mention, inline=False)
         embed.set_footer(text=self._footer("message_delete", message.author.id))
-        await channel.send(embed=embed)
+        try:
+            await channel.send(embed=embed)
+            print(f"✅ [DEBUG-DELETE] log envoyée (message {message.id})")
+        except Exception as e:
+            print(f"❌ [DEBUG-DELETE] échec envoi : {type(e).__name__}: {e}")
 
         # Log pièces jointes supprimées dans le channel fichier
         if message.attachments:
