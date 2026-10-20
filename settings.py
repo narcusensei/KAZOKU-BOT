@@ -804,10 +804,8 @@ TEXTS = {
     "embed_color_invalid":              "❌ Couleur invalide. Format attendu : code hexadécimal à 6 chiffres (ex: `#FF0000`).",
     "embed_image_invalid":              "❌ URL invalide. Fournis une URL complète et directe vers l'image (commençant par `http://` ou `https://`).",
     "embed_open_form":                  "Clique sur le bouton pour ouvrir le formulaire de création :",
-    "embed_log_title":                  "EMBED PERSONNALISÉ CRÉÉ",
-    "embed_log_desc":                   "Un embed personnalisé a été publié",
-    "embed_log_title_field":            "Titre",
-    "embed_log_no_title":               "(sans titre)",
+    "embed_log_title":                  "CRÉATION EMBED",
+    "embed_log_desc":                   "Création d'un nouvel embed",
 
     # --- Logs : rôles serveur ---
     "role_created_title":               "RÔLE CRÉÉ",

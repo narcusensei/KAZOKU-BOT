@@ -225,16 +225,13 @@ class EmbedModal(discord.ui.Modal, title=TEXTS["embed_form_title"]):
         if not log_channel:
             return
         try:
-            log_embed = discord.Embed(color=discord.Color(int(EMBED_DEFAULT_COLOR, 16)))  # Violet
-            log_embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
-            log_embed.description = (
-                f'{CUSTOM_EMOJIS["info"]} **{TEXTS["embed_log_title"]}**\n'
-                f'{TEXTS["embed_log_desc"]}'
+            log_embed = discord.Embed(
+                title=f'{CUSTOM_EMOJIS["info"]} **{TEXTS["embed_log_title"]}**',
+                color=discord.Color(int(EMBED_DEFAULT_COLOR, 16))  # Violet
             )
-            title_display = embed.title or TEXTS["embed_log_no_title"]
-            log_embed.add_field(name=TEXTS["embed_log_title_field"], value=truncate_text(title_display, 1000), inline=False)
+            log_embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
+            log_embed.description = TEXTS["embed_log_desc"]
             log_embed.add_field(name=TEXTS["member_by"], value=interaction.user.mention, inline=False)
-            log_embed.add_field(name=TEXTS["channel_field"], value=interaction.channel.mention, inline=False)
             log_embed.set_footer(text=logs_cog._footer("embed_create", interaction.user.id))
             await log_channel.send(embed=log_embed)
         except (discord.Forbidden, discord.HTTPException):

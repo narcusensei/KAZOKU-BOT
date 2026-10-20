@@ -514,7 +514,7 @@ class Logs(commands.Cog):
 
         embed = discord.Embed(color=color)
         embed.set_author(name=target.global_name or target.name, icon_url=target.display_avatar.url)
-        embed.description = f"{emoji} **{action_type.upper()}**"
+        embed.title = f"{emoji} **{action_type.upper()}**"
         embed.add_field(name=TEXTS["user_field"], value=f"<@{target.id}>", inline=True)
         embed.add_field(name=TEXTS["moderator_field"], value=f"<@{moderator.id}>" if moderator else TEXTS["unknown_moderator"], inline=True)
         embed.add_field(name=TEXTS["reason_field"], value=truncate_text(reason or TEXTS["no_reason"], 1000), inline=False)
@@ -545,54 +545,54 @@ class Logs(commands.Cog):
 
         # Description principale avec état actuel complet
         if action_type == "stream_start":
-            embed.description = f"{emoji} **{TEXTS['voice_stream_start_title']}** | {status}"
+            embed.title = f"{emoji} **{TEXTS['voice_stream_start_title']}** | {status}"
             embed.add_field(name=TEXTS["voice_information"], value=f"{member.mention} {TEXTS['voice_stream_start_desc']}", inline=False)
         elif action_type == "stream_end":
-            embed.description = f"{emoji} **{TEXTS['voice_stream_end_title']}** | {status}"
+            embed.title = f"{emoji} **{TEXTS['voice_stream_end_title']}** | {status}"
             embed.add_field(name=TEXTS["voice_information"], value=f"{member.mention} {TEXTS['voice_stream_end_desc']}", inline=False)
         elif action_type == "join":
-            embed.description = f"{emoji} **{TEXTS['voice_join_title']}** | {status}"
+            embed.title = f"{emoji} **{TEXTS['voice_join_title']}** | {status}"
             embed.add_field(name=TEXTS["voice_information"], value=f"{member.mention} {TEXTS['voice_join_desc']}", inline=False)
         elif action_type == "leave":
-            embed.description = f"{emoji} **{TEXTS['voice_leave_title']}** | {status}"
+            embed.title = f"{emoji} **{TEXTS['voice_leave_title']}** | {status}"
             if action_by:
                 embed.add_field(name=TEXTS["voice_information"], value=f"{member.mention} {TEXTS['voice_kicked_desc']}", inline=False)
             else:
                 embed.add_field(name=TEXTS["voice_information"], value=f"{member.mention} {TEXTS['voice_leave_desc']}", inline=False)
         elif action_type == "mute":
-            embed.description = f"{emoji} **{TEXTS['voice_mute_title']}** | {status}"
+            embed.title = f"{emoji} **{TEXTS['voice_mute_title']}** | {status}"
             if action_by:
                 embed.add_field(name=TEXTS["voice_information"], value=f"{member.mention} {TEXTS['voice_mute_server_desc']}", inline=False)
             else:
                 embed.add_field(name=TEXTS["voice_information"], value=f"{member.mention} {TEXTS['voice_mute_self_desc']}", inline=False)
         elif action_type == "unmute":
-            embed.description = f"{emoji} **{TEXTS['voice_unmute_title']}** | {status}"
+            embed.title = f"{emoji} **{TEXTS['voice_unmute_title']}** | {status}"
             if action_by:
                 embed.add_field(name=TEXTS["voice_information"], value=f"{member.mention} {TEXTS['voice_unmute_server_desc']}", inline=False)
             else:
                 embed.add_field(name=TEXTS["voice_information"], value=f"{member.mention} {TEXTS['voice_unmute_self_desc']}", inline=False)
         elif action_type == "deafen":
-            embed.description = f"{emoji} **{TEXTS['voice_deafen_title']}** | {status}"
+            embed.title = f"{emoji} **{TEXTS['voice_deafen_title']}** | {status}"
             if action_by:
                 embed.add_field(name=TEXTS["voice_information"], value=f"{member.mention} {TEXTS['voice_deafen_server_desc']}", inline=False)
             else:
                 embed.add_field(name=TEXTS["voice_information"], value=f"{member.mention} {TEXTS['voice_deafen_self_desc']}", inline=False)
         elif action_type == "undeafen":
-            embed.description = f"{emoji} **{TEXTS['voice_undeafen_title']}** | {status}"
+            embed.title = f"{emoji} **{TEXTS['voice_undeafen_title']}** | {status}"
             if action_by:
                 embed.add_field(name=TEXTS["voice_information"], value=f"{member.mention} {TEXTS['voice_undeafen_server_desc']}", inline=False)
             else:
                 embed.add_field(name=TEXTS["voice_information"], value=f"{member.mention} {TEXTS['voice_undeafen_self_desc']}", inline=False)
         elif action_type == "video":
-            embed.description = f"{emoji} **{TEXTS['voice_video_on_title']}** | {status}"
+            embed.title = f"{emoji} **{TEXTS['voice_video_on_title']}** | {status}"
             embed.add_field(name=TEXTS["voice_information"], value=f"{member.mention} {TEXTS['voice_video_on_desc']}", inline=False)
         elif action_type == "no_video":
-            embed.description = f"{emoji} **{TEXTS['voice_video_off_title']}** | {status}"
+            embed.title = f"{emoji} **{TEXTS['voice_video_off_title']}** | {status}"
             embed.add_field(name=TEXTS["voice_information"], value=f"{member.mention} {TEXTS['voice_video_off_desc']}", inline=False)
         elif action_type == "move":
             channel_before_type = get_channel_type(channel_before) if channel_before else TEXTS["unknown"]
             channel_after_type = get_channel_type(channel_after) if channel_after else TEXTS["unknown"]
-            embed.description = f"{emoji} **{TEXTS['voice_move_title']}** | {status}"
+            embed.title = f"{emoji} **{TEXTS['voice_move_title']}** | {status}"
             embed.add_field(name=TEXTS["voice_information"], value=f"{member.mention} {TEXTS['voice_move_desc']} {channel_before.mention if channel_before else TEXTS['unknown']} ({channel_before_type}) {TEXTS['voice_move_to']} {channel_after.mention if channel_after else TEXTS['unknown']} ({channel_after_type})", inline=False)
             if moved_by:
                 embed.add_field(name=TEXTS["voice_moved_by"], value=moved_by.mention, inline=False)
@@ -644,7 +644,8 @@ class Logs(commands.Cog):
 
         embed = discord.Embed(color=discord.Color(int("FFD700", 16)))  # Jaune
         embed.set_author(name=user.display_name, icon_url=user.display_avatar.url)
-        embed.description = f'{CUSTOM_EMOJIS["command_used"]} **{TEXTS["command_used_title"]}**\n{TEXTS["command_used_desc"]}'
+        embed.title = f'{CUSTOM_EMOJIS["command_used"]} **{TEXTS["command_used_title"]}**'
+        embed.description = f'{TEXTS["command_used_desc"]}'
         embed.add_field(name=TEXTS["command_name_field"], value=f'`{prefix}{command_name}`', inline=False)
         embed.add_field(name=TEXTS["member_by"], value=user.mention, inline=False)
         embed.set_footer(text=self._footer("command_used", user.id))
@@ -657,7 +658,8 @@ class Logs(commands.Cog):
         ts = int(end_time.timestamp())
         embed = discord.Embed(color=GIVEAWAY_COLOR)
         embed.set_author(name=creator.display_name, icon_url=creator.display_avatar.url)
-        embed.description = f'{CUSTOM_EMOJIS["giveaway"]} **{name}**\n{description or ""}'
+        embed.title = f'{CUSTOM_EMOJIS["giveaway"]} **{name}**'
+        embed.description = f'{description or ""}'
         embed.add_field(name=TEXTS["giveaway_id_field"], value=f"`{giveaway_id}`", inline=False)
         embed.add_field(name=TEXTS["giveaway_ends_log_field"], value=f"<t:{ts}:R> - <t:{ts}:F>", inline=False)
         embed.add_field(name=TEXTS["giveaway_created_by"], value=creator.mention, inline=False)
@@ -717,7 +719,7 @@ class Logs(commands.Cog):
 
             embed = discord.Embed(color=MEMBER_COLORS["bot_join"])
             embed.set_author(name=f"{member.global_name or member.name}", icon_url=member.display_avatar.url)
-            embed.description = f'{CUSTOM_EMOJIS["bot_join"]} **{TEXTS["member_bot_join_title"]}**'
+            embed.title = f'{CUSTOM_EMOJIS["bot_join"]} **{TEXTS["member_bot_join_title"]}**'
             embed.add_field(name=TEXTS["voice_information"], value=f"{member.mention} {TEXTS['member_bot_join_desc']} {moderator.mention if moderator else TEXTS['unknown']}", inline=False)
             embed.set_footer(text=self._footer("member_bot_join", member.id))
             await channel.send(embed=embed)
@@ -752,7 +754,7 @@ class Logs(commands.Cog):
 
         embed = discord.Embed(color=MEMBER_COLORS["join"])
         embed.set_author(name=f"{member.global_name or member.name}", icon_url=member.display_avatar.url)
-        embed.description = f'{CUSTOM_EMOJIS["member_join"]} **{TEXTS["member_join_title"]}**'
+        embed.title = f'{CUSTOM_EMOJIS["member_join"]} **{TEXTS["member_join_title"]}**'
         embed.add_field(name=TEXTS["user_field"], value=f"{member.mention} {TEXTS['member_join_desc']}", inline=False)
 
         if not member.avatar:
@@ -786,7 +788,7 @@ class Logs(commands.Cog):
 
             embed = discord.Embed(color=MEMBER_COLORS["bot_leave"])
             embed.set_author(name=f"{member.global_name or member.name}", icon_url=member.display_avatar.url)
-            embed.description = f'{CUSTOM_EMOJIS["bot_leave"]} **{TEXTS["member_bot_leave_title"]}**'
+            embed.title = f'{CUSTOM_EMOJIS["bot_leave"]} **{TEXTS["member_bot_leave_title"]}**'
             embed.add_field(name=TEXTS["info_field"], value=f"{member.mention} retiré par {moderator.mention if moderator else TEXTS['unknown']}", inline=False)
             embed.set_footer(text=self._footer("member_bot_leave", member.id))
             await channel.send(embed=embed)
@@ -820,7 +822,7 @@ class Logs(commands.Cog):
 
         embed = discord.Embed(color=MEMBER_COLORS["leave"])
         embed.set_author(name=f"{member.global_name or member.name}", icon_url=member.display_avatar.url)
-        embed.description = f'{CUSTOM_EMOJIS["member_leave"]} **{TEXTS["member_leave_title"]}**'
+        embed.title = f'{CUSTOM_EMOJIS["member_leave"]} **{TEXTS["member_leave_title"]}**'
 
         txt = f"{member.mention} a été **{reason_leave}** par {moderator.mention if moderator else TEXTS['system_fallback']}" if reason_leave != TEXTS["member_leave_normal_reason"] else f"{member.mention} {TEXTS['member_leave_desc']}"
         embed.add_field(name=TEXTS["user_field"], value=txt, inline=False)
@@ -866,7 +868,7 @@ class Logs(commands.Cog):
 
                     embed = discord.Embed(color=color)
                     embed.set_author(name=after.display_name, icon_url=after.display_avatar.url)
-                    embed.description = f'{CUSTOM_EMOJIS["booster"]} **{TEXTS["booster_title"]}**'
+                    embed.title = f'{CUSTOM_EMOJIS["booster"]} **{TEXTS["booster_title"]}**'
                     embed.add_field(name=field_name, value=field_value, inline=False)
                     embed.set_footer(text=self._footer("booster_add" if booster_added else "booster_remove", after.id))
                     await server_channel.send(embed=embed)
@@ -889,7 +891,8 @@ class Logs(commands.Cog):
                 desc_key = "member_role_add_one_desc" if len(added) == 1 else "member_role_add_many_desc"
                 embed = discord.Embed(color=MEMBER_COLORS["role_add"])
                 embed.set_author(name=after.display_name, icon_url=after.display_avatar.url)
-                embed.description = f'{emoji} **{TEXTS["member_role_add_title"]}**\n{TEXTS[desc_key].format(user=after.mention)}'
+                embed.title = f'{emoji} **{TEXTS["member_role_add_title"]}**'
+                embed.description = f'{TEXTS[desc_key].format(user=after.mention)}'
                 embed.add_field(name=TEXTS["member_role_field"], value=truncate_text(", ".join([r.mention for r in added]), 1000), inline=False)
                 embed.add_field(name=TEXTS["member_by"], value=by_member.mention, inline=True)
                 embed.set_footer(text=self._footer("member_role_add", after.id))
@@ -900,7 +903,8 @@ class Logs(commands.Cog):
                 desc_key = "member_role_remove_one_desc" if len(removed) == 1 else "member_role_remove_many_desc"
                 embed = discord.Embed(color=MEMBER_COLORS["role_remove"])
                 embed.set_author(name=after.display_name, icon_url=after.display_avatar.url)
-                embed.description = f'{emoji} **{TEXTS["member_role_remove_title"]}**\n{TEXTS[desc_key].format(user=after.mention)}'
+                embed.title = f'{emoji} **{TEXTS["member_role_remove_title"]}**'
+                embed.description = f'{TEXTS[desc_key].format(user=after.mention)}'
                 embed.add_field(name=TEXTS["member_role_field"], value=truncate_text(", ".join([r.mention for r in removed]), 1000), inline=False)
                 embed.add_field(name=TEXTS["member_by"], value=by_member.mention, inline=True)
                 embed.set_footer(text=self._footer("member_role_remove", after.id))
@@ -1018,7 +1022,7 @@ class Logs(commands.Cog):
 
                         fembed = discord.Embed(color=MESSAGE_COLORS["file_deleted"])
                         fembed.set_author(name=message.author.display_name, icon_url=message.author.display_avatar.url)
-                        fembed.description = f'{CUSTOM_EMOJIS["attachment_deleted"]} **{TEXTS["file_deleted_title"]}**'
+                        fembed.title = f'{CUSTOM_EMOJIS["attachment_deleted"]} **{TEXTS["file_deleted_title"]}**'
                         if is_image:
                             fembed.set_image(url=f"attachment://{att.filename}")
                         fembed.add_field(name=TEXTS["file_deleted_name_field"], value=att.filename, inline=False)
@@ -1057,7 +1061,7 @@ class Logs(commands.Cog):
 
                 embed = discord.Embed(color=MESSAGE_COLORS["poll_deleted"])
                 embed.set_author(name=f"{poll_message.author.global_name or poll_message.author.name}", icon_url=poll_message.author.display_avatar.url)
-                embed.description = f'{CUSTOM_EMOJIS["message_deleted"]} **{TEXTS["poll_deleted"]}**'
+                embed.title = f'{CUSTOM_EMOJIS["message_deleted"]} **{TEXTS["poll_deleted"]}**'
 
                 question_text = poll.question if poll.question else TEXTS["poll_unknown_question"]
                 embed.add_field(name=TEXTS["poll_name_field"], value=question_text, inline=False)
@@ -1172,7 +1176,7 @@ class Logs(commands.Cog):
 
                     embed = discord.Embed(color=MESSAGE_COLORS["file_deleted"])
                     embed.set_author(name=message.author.display_name, icon_url=message.author.display_avatar.url)
-                    embed.description = f'{CUSTOM_EMOJIS["attachment_deleted"]} **{TEXTS["file_deleted_title"]}**'
+                    embed.title = f'{CUSTOM_EMOJIS["attachment_deleted"]} **{TEXTS["file_deleted_title"]}**'
 
                     # Image : afficher en haut de l'embed (via attachment si URL morte)
                     if is_image:
@@ -1218,7 +1222,7 @@ class Logs(commands.Cog):
 
             embed = discord.Embed(color=color)
             embed.set_author(name=after.author.display_name, icon_url=after.author.display_avatar.url)
-            embed.description = f"{emoji} **{action_text}**"
+            embed.title = f"{emoji} **{action_text}**"
 
             content = after.content or TEXTS["empty_content"]
             content = truncate_content(content)
@@ -1297,7 +1301,7 @@ class Logs(commands.Cog):
         embed = discord.Embed(color=MESSAGE_COLORS["reaction"])
         embed.set_author(name=user_obj.display_name, icon_url=user_obj.display_avatar.url)
 
-        embed.description = f'{CUSTOM_EMOJIS["reaction_remove"]} **{TEXTS["reaction_removed"]}**'
+        embed.title = f'{CUSTOM_EMOJIS["reaction_remove"]} **{TEXTS["reaction_removed"]}**'
         embed.add_field(name=TEXTS["action_field"], value=f"{user_obj.mention} {TEXTS['reaction_removed_desc']}", inline=False)
         embed.add_field(name=TEXTS["reaction_emoji"], value=emoji_display, inline=True)
 
@@ -1371,7 +1375,7 @@ class Logs(commands.Cog):
                 embed = discord.Embed(color=color)
                 if booster:
                     embed.set_author(name=booster.display_name, icon_url=booster.display_avatar.url)
-                embed.description = f'{emoji} **{title}**'
+                embed.title = f'{emoji} **{title}**'
                 embed.add_field(name=count_field, value=f"`{count_val}`", inline=False)
                 embed.add_field(name=TEXTS["boost_level_field"], value=f"`{after.premium_tier}`", inline=True)
                 embed.add_field(name=TEXTS["boost_total_field"], value=f"`{after.premium_subscription_count}`", inline=True)
@@ -1432,7 +1436,7 @@ class Logs(commands.Cog):
 
         embed = discord.Embed(color=SERVER_COLORS["edited"])
         embed.set_author(name=mod_name, icon_url=mod_avatar)
-        embed.description = f'{CUSTOM_EMOJIS["server_edited"]} **{TEXTS["server_edited_title"]}**'
+        embed.title = f'{CUSTOM_EMOJIS["server_edited"]} **{TEXTS["server_edited_title"]}**'
 
         for change_type, old_val, new_val in changes:
             if change_type == "name":
@@ -1613,7 +1617,7 @@ class Logs(commands.Cog):
 
         embed = discord.Embed(color=THREAD_COLORS["created"])
         embed.set_author(name=creator.display_name, icon_url=creator.display_avatar.url)
-        embed.description = f'{CUSTOM_EMOJIS["thread_created"]} **{TEXTS["thread_created_desc"]}**'
+        embed.title = f'{CUSTOM_EMOJIS["thread_created"]} **{TEXTS["thread_created_desc"]}**'
         embed.add_field(name=TEXTS["voice_information"], value=f"{creator.mention} {TEXTS['thread_created_text']} **{thread.name}**", inline=False)
 
         parent_channel = thread.parent
@@ -1652,7 +1656,8 @@ class Logs(commands.Cog):
 
         embed = discord.Embed(color=THREAD_COLORS["reopened"])
         embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
-        embed.description = f'{CUSTOM_EMOJIS["thread_unlock"]} **{TEXTS["thread_reopened_title"]}**\n\n{member.mention} a `rouvert` un fil'
+        embed.title = f'{CUSTOM_EMOJIS["thread_unlock"]} **{TEXTS["thread_reopened_title"]}**'
+        embed.description = f'{member.mention} a `rouvert` un fil'
 
         parent_channel = thread.parent
         embed.add_field(name=TEXTS["voice_channel"], value=parent_channel.mention if parent_channel else TEXTS["unknown"], inline=True)
@@ -1681,9 +1686,11 @@ class Logs(commands.Cog):
         embed.set_author(name=moderator.display_name if moderator else TEXTS["unknown"], icon_url=moderator.display_avatar.url if moderator else None)
 
         if moderator:
-            embed.description = f'{CUSTOM_EMOJIS["thread_deleted"]} **{TEXTS["thread_deleted_title"]}**\n\n{moderator.mention} {TEXTS["thread_deleted_text"]}'
+            embed.title = f'{CUSTOM_EMOJIS["thread_deleted"]} **{TEXTS["thread_deleted_title"]}**'
+            embed.description = f'{moderator.mention} {TEXTS["thread_deleted_text"]}'
         else:
-            embed.description = f'{CUSTOM_EMOJIS["thread_deleted"]} **{TEXTS["thread_deleted_title"]}**\n\n{TEXTS["thread_deleted_unknown"]}'
+            embed.title = f'{CUSTOM_EMOJIS["thread_deleted"]} **{TEXTS["thread_deleted_title"]}**'
+            embed.description = f'{TEXTS["thread_deleted_unknown"]}'
 
         parent_channel = thread.parent
         embed.add_field(name=TEXTS["voice_channel"], value=parent_channel.mention if parent_channel else TEXTS["unknown"], inline=True)
@@ -1783,10 +1790,12 @@ class Logs(commands.Cog):
 
         if len(modifications) == 1:
             # Une seule modification : format simple
-            embed.description = f"{emoji} **{title}**\n\n{moderator.mention} {modifications[0]}"
+            embed.title = f"{emoji} **{title}**"
+            embed.description = f"{moderator.mention} {modifications[0]}"
         else:
             # Plusieurs modifications : regrouper
-            embed.description = f"{emoji} **{title}**\n\n{moderator.mention} {TEXTS['multiple_modifications_desc']}"
+            embed.title = f"{emoji} **{title}**"
+            embed.description = f"{moderator.mention} {TEXTS['multiple_modifications_desc']}"
             for i, mod in enumerate(modifications, 1):
                 embed.add_field(name=f"{TEXTS['modification_field']} {i}", value=mod, inline=False)
 
@@ -1819,7 +1828,7 @@ class Logs(commands.Cog):
 
         embed = discord.Embed(color=CHANNEL_COLORS["created"])
         embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
-        embed.description = f'{CUSTOM_EMOJIS["channel_created"]} **{get_channel_log_title(channel, "created")}**'
+        embed.title = f'{CUSTOM_EMOJIS["channel_created"]} **{get_channel_log_title(channel, "created")}**'
 
         # Description : mention du channel + admin (+ catégorie parente si applicable)
         if is_category:
@@ -1858,7 +1867,7 @@ class Logs(commands.Cog):
 
         embed = discord.Embed(color=CHANNEL_COLORS["deleted"])
         embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
-        embed.description = f'{CUSTOM_EMOJIS["channel_deleted"]} **{get_channel_log_title(channel, "deleted")}**'
+        embed.title = f'{CUSTOM_EMOJIS["channel_deleted"]} **{get_channel_log_title(channel, "deleted")}**'
 
         if is_category:
             desc = TEXTS["category_deleted_desc"].format(channel=channel_display, moderator=member.mention)
@@ -1986,10 +1995,8 @@ class Logs(commands.Cog):
 
             embed = discord.Embed(color=color)
             embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
-            embed.description = (
-                f'{emoji} **{title}**\n'
-                f'{member.mention} a modifié les permissions {channel_text} {TEXTS["channel_perm_for_role"]} {target_mention}'
-            )
+            embed.title = f'{emoji} **{title}**'
+            embed.description = f'{member.mention} a modifié les permissions {channel_text} {TEXTS["channel_perm_for_role"]} {target_mention}'
 
             # Afficher les permissions old / new (uniquement les différences)
             if action_key == "created":
@@ -2084,7 +2091,8 @@ class Logs(commands.Cog):
 
         embed = discord.Embed(color=CHANNEL_COLORS["edited"])
         embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
-        embed.description = f'{CUSTOM_EMOJIS["channel_edited"]} **{get_channel_log_title(after, "edited")}**\n{desc_template.format(channel=channel_display)}'
+        embed.title = f'{CUSTOM_EMOJIS["channel_edited"]} **{get_channel_log_title(after, "edited")}**'
+        embed.description = f'{desc_template.format(channel=channel_display)}'
 
         for field_name, field_value in changes:
             embed.add_field(name=field_name, value=field_value, inline=False)
@@ -2158,7 +2166,8 @@ class Logs(commands.Cog):
 
         embed = discord.Embed(color=ROLE_COLORS["created"])
         embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
-        embed.description = f'{CUSTOM_EMOJIS["role_created"]} **{TEXTS["role_created_title"]}**\n{TEXTS["role_created_desc"].format(name=role.name)}'
+        embed.title = f'{CUSTOM_EMOJIS["role_created"]} **{TEXTS["role_created_title"]}**'
+        embed.description = f'{TEXTS["role_created_desc"].format(name=role.name)}'
         embed.add_field(name=TEXTS["role_field"], value=f"`{role.name}`", inline=False)
         embed.add_field(name=TEXTS["member_by"], value=member.mention, inline=False)
         embed.set_footer(text=self._footer("role_create", member.id))
@@ -2182,7 +2191,8 @@ class Logs(commands.Cog):
 
         embed = discord.Embed(color=ROLE_COLORS["deleted"])
         embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
-        embed.description = f'{CUSTOM_EMOJIS["role_deleted"]} **{TEXTS["role_deleted_title"]}**\n{TEXTS["role_deleted_desc"].format(name=role.name)}'
+        embed.title = f'{CUSTOM_EMOJIS["role_deleted"]} **{TEXTS["role_deleted_title"]}**'
+        embed.description = f'{TEXTS["role_deleted_desc"].format(name=role.name)}'
         embed.add_field(name=TEXTS["role_field"], value=f"`{role.name}`", inline=False)
         embed.add_field(name=TEXTS["member_by"], value=member.mention, inline=False)
         embed.set_footer(text=self._footer("role_delete", member.id))
@@ -2245,7 +2255,8 @@ class Logs(commands.Cog):
 
         embed = discord.Embed(color=ROLE_COLORS["edited"])
         embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
-        embed.description = f'{CUSTOM_EMOJIS["role_edited"]} **{TEXTS["role_edited_title"]}**\n{TEXTS["role_edited_desc"].format(name=after.name)}'
+        embed.title = f'{CUSTOM_EMOJIS["role_edited"]} **{TEXTS["role_edited_title"]}**'
+        embed.description = f'{TEXTS["role_edited_desc"].format(name=after.name)}'
 
         for field_name, field_value in changes:
             embed.add_field(name=field_name, value=field_value, inline=False)
@@ -2281,7 +2292,8 @@ class Logs(commands.Cog):
 
         embed = discord.Embed(color=ROLE_COLORS["edited"])
         embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
-        embed.description = f'{CUSTOM_EMOJIS["role_edited"]} **{TEXTS["role_icon_title"]}**\n{desc_template.format(role=after.mention)}'
+        embed.title = f'{CUSTOM_EMOJIS["role_edited"]} **{TEXTS["role_icon_title"]}**'
+        embed.description = f'{desc_template.format(role=after.mention)}'
 
         # Afficher l'icône concernée en thumbnail
         icon_url = str(icon_to_show) if icon_to_show else None
@@ -2323,7 +2335,8 @@ class Logs(commands.Cog):
 
         embed = discord.Embed(color=ROLE_COLORS["edited"])
         embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
-        embed.description = f'{CUSTOM_EMOJIS["role_permission_edited"]} **{TEXTS["role_perms_title"]}**\n{TEXTS["role_perms_desc"].format(role=after.mention)}'
+        embed.title = f'{CUSTOM_EMOJIS["role_permission_edited"]} **{TEXTS["role_perms_title"]}**'
+        embed.description = f'{TEXTS["role_perms_desc"].format(role=after.mention)}'
 
         if old_lines:
             embed.add_field(name=TEXTS["channel_perm_old_field"], value=truncate_text("\n".join(old_lines), 1000), inline=False)
@@ -2366,7 +2379,8 @@ class Logs(commands.Cog):
 
         embed = discord.Embed(color=INVITE_COLORS["created"])
         embed.set_author(name=inviter_name, icon_url=inviter_avatar)
-        embed.description = f'{CUSTOM_EMOJIS["invite_created"]} **{TEXTS["invite_created_title"]}**\n\n{inviter_mention} {TEXTS["invite_created_desc"]}'
+        embed.title = f'{CUSTOM_EMOJIS["invite_created"]} **{TEXTS["invite_created_title"]}**'
+        embed.description = f'{inviter_mention} {TEXTS["invite_created_desc"]}'
 
         embed.add_field(name=TEXTS["invite_link_field"], value=invite.url, inline=False)
         embed.add_field(name=TEXTS["invite_channel_field"], value=invite.channel.mention, inline=False)
@@ -2425,7 +2439,8 @@ class Logs(commands.Cog):
 
         embed = discord.Embed(color=INVITE_COLORS["deleted"])
         embed.set_author(name=mod_name, icon_url=mod_avatar)
-        embed.description = f'{CUSTOM_EMOJIS["invite_deleted"]} **{TEXTS["invite_deleted_title"]}**\n\n{mod_mention} {TEXTS["invite_deleted_desc"]}'
+        embed.title = f'{CUSTOM_EMOJIS["invite_deleted"]} **{TEXTS["invite_deleted_title"]}**'
+        embed.description = f'{mod_mention} {TEXTS["invite_deleted_desc"]}'
 
         embed.add_field(name=TEXTS["invite_link_field"], value=f"https://discord.gg/{invite.code}", inline=False)
         embed.add_field(name=TEXTS["invite_channel_field"], value=invite.channel.mention, inline=False)
@@ -2551,7 +2566,8 @@ class Logs(commands.Cog):
 
         embed = discord.Embed(color=color)
         embed.set_author(name=member.display_name, icon_url=member.display_avatar.url)
-        embed.description = f'{emoji} **{title}**\n\n{desc_template.format(name=webhook_name)}'
+        embed.title = f'{emoji} **{title}**'
+        embed.description = f'{desc_template.format(name=webhook_name)}'
 
         # Cas spécial : changement d'avatar uniquement
         if log_type.startswith("webhook_avatar"):
@@ -2633,7 +2649,9 @@ class Logs(commands.Cog):
 
                 embed = discord.Embed(color=EMOJI_COLORS["added"])
                 embed.set_author(name=mod_name, icon_url=mod_avatar)
-                embed.description = f'{CUSTOM_EMOJIS["emoji_added"]} **{TEXTS["emoji_added_title"]}**\n{str(emoji)} a été créé par {mod_mention}'
+                embed.title = f'{CUSTOM_EMOJIS["emoji_added"]} **{TEXTS["emoji_added_title"]}**'
+                embed.description = f'{str(emoji)} a été créé par {mod_mention}'
+   
                 embed.set_thumbnail(url=emoji.url)
                 embed.add_field(name=TEXTS["emoji_name_field"], value=f"`{emoji.name}`", inline=False)
 
@@ -2653,7 +2671,10 @@ class Logs(commands.Cog):
 
                 embed = discord.Embed(color=EMOJI_COLORS["removed"])
                 embed.set_author(name=mod_name, icon_url=mod_avatar)
-                embed.description = f'{CUSTOM_EMOJIS["emoji_removed"]} **{TEXTS["emoji_removed_title"]}**\n`{emoji.name}` a été supprimé par {mod_mention}'
+                embed.title = f'{CUSTOM_EMOJIS["emoji_removed"]} **{TEXTS["emoji_removed_title"]}**'
+                embed.description = f'`{emoji.name}` a été supprimé par {mod_mention}'
+
+ 
 
                 if moderator:
                     embed.set_footer(text=self._footer("emoji_removed", moderator.id))
@@ -2677,7 +2698,9 @@ class Logs(commands.Cog):
 
                 embed = discord.Embed(color=EMOJI_COLORS["edited"])
                 embed.set_author(name=mod_name, icon_url=mod_avatar)
-                embed.description = f'{CUSTOM_EMOJIS["emoji_edited"]} **{TEXTS["emoji_edited_title"]}**\n{str(after_emoji)} à été modifié par {mod_mention}\n\n**{TEXTS["new_name"]}**\n`{after_emoji.name}`'
+                embed.title = f'{CUSTOM_EMOJIS["emoji_edited"]} **{TEXTS["emoji_edited_title"]}**'
+                embed.description = f'{str(after_emoji)} à été modifié par {mod_mention}\n\n**{TEXTS["new_name"]}**\n`{after_emoji.name}`'
+   
                 embed.set_thumbnail(url=after_emoji.url)
 
                 if moderator:
@@ -2709,7 +2732,9 @@ class Logs(commands.Cog):
 
                 embed = discord.Embed(color=STICKER_COLORS["created"])
                 embed.set_author(name=mod_name, icon_url=mod_avatar)
-                embed.description = f'{CUSTOM_EMOJIS["sticker_created"]} **{TEXTS["sticker_created_title"]}**\nLe sticker `{sticker.name}` a été créé par {mod_mention}'
+                embed.title = f'{CUSTOM_EMOJIS["sticker_created"]} **{TEXTS["sticker_created_title"]}**'
+                embed.description = f'Le sticker `{sticker.name}` a été créé par {mod_mention}'
+   
                 embed.add_field(name=TEXTS["sticker_emoji_id_field"], value=f"`{sticker.emoji}`", inline=False)
                 if sticker.description:
                     embed.add_field(name=TEXTS["sticker_description_field"], value=sticker.description, inline=False)
@@ -2732,7 +2757,9 @@ class Logs(commands.Cog):
 
                 embed = discord.Embed(color=STICKER_COLORS["deleted"])
                 embed.set_author(name=mod_name, icon_url=mod_avatar)
-                embed.description = f'{CUSTOM_EMOJIS["sticker_deleted"]} **{TEXTS["sticker_deleted_title"]}**\nLe sticker `{sticker.name}` a été supprimé par {mod_mention}'
+                embed.title = f'{CUSTOM_EMOJIS["sticker_deleted"]} **{TEXTS["sticker_deleted_title"]}**'
+                embed.description = f'Le sticker `{sticker.name}` a été supprimé par {mod_mention}'
+  
                 embed.add_field(name=TEXTS["sticker_emoji_id_field"], value=f"`{sticker.emoji}`", inline=False)
 
                 if moderator:
@@ -2770,7 +2797,8 @@ class Logs(commands.Cog):
 
                 embed = discord.Embed(color=STICKER_COLORS["modified"])
                 embed.set_author(name=mod_name, icon_url=mod_avatar)
-                embed.description = f'{CUSTOM_EMOJIS["sticker_edited"]} **{TEXTS["sticker_modified_title"]}**\n{changes_text}\n\n**{TEXTS["sticker_modified_by"]}**\n{mod_mention}'
+                embed.title = f'{CUSTOM_EMOJIS["sticker_edited"]} **{TEXTS["sticker_modified_title"]}**'
+                embed.description = f'{changes_text}\n\n**{TEXTS["sticker_modified_by"]}**\n{mod_mention}'
 
                 if moderator:
                     embed.set_footer(text=self._footer("sticker_modified", moderator.id))
@@ -2795,7 +2823,10 @@ class Logs(commands.Cog):
 
         embed = discord.Embed(color=SOUNDBOARD_COLORS["added"])
         embed.set_author(name=mod_name, icon_url=mod_avatar)
-        embed.description = f'{CUSTOM_EMOJIS["soundboard_added"]} **{TEXTS["soundboard_added_title"]}**\nLa soundboard `{sound.name}` a été ajouté par {mod_mention}'
+        embed.title = f'{CUSTOM_EMOJIS["soundboard_added"]} **{TEXTS["soundboard_added_title"]}**'
+        embed.description = f'La soundboard `{sound.name}` a été ajouté par {mod_mention}'
+
+ 
 
         if moderator:
             embed.set_footer(text=self._footer("soundboard_added", moderator.id))
@@ -2818,7 +2849,10 @@ class Logs(commands.Cog):
 
         embed = discord.Embed(color=SOUNDBOARD_COLORS["removed"])
         embed.set_author(name=mod_name, icon_url=mod_avatar)
-        embed.description = f'{CUSTOM_EMOJIS["soundboard_removed"]} **{TEXTS["soundboard_removed_title"]}**\nLa soundboard `{sound.name}` a été retiré par {mod_mention}'
+        embed.title = f'{CUSTOM_EMOJIS["soundboard_removed"]} **{TEXTS["soundboard_removed_title"]}**'
+        embed.description = f'La soundboard `{sound.name}` a été retiré par {mod_mention}'
+
+ 
 
         if moderator:
             embed.set_footer(text=self._footer("soundboard_removed", moderator.id))
@@ -2852,7 +2886,8 @@ class Logs(commands.Cog):
 
         embed = discord.Embed(color=SOUNDBOARD_COLORS["modified"])
         embed.set_author(name=mod_name, icon_url=mod_avatar)
-        embed.description = f'{CUSTOM_EMOJIS["soundboard_edited"]} **{TEXTS["soundboard_modified_title"]}**\n{changes_text}\n\n**{TEXTS["soundboard_modified_by"]}**\n{mod_mention}'
+        embed.title = f'{CUSTOM_EMOJIS["soundboard_edited"]} **{TEXTS["soundboard_modified_title"]}**'
+        embed.description = f'{changes_text}\n\n**{TEXTS["soundboard_modified_by"]}**\n{mod_mention}'
 
         if moderator:
             embed.set_footer(text=self._footer("soundboard_modified", moderator.id))
@@ -2878,31 +2913,40 @@ class Logs(commands.Cog):
 
         if action_type == "created":
             status = get_voice_state_status(member.voice)
-            embed.description = f"{emoji} **{TEXTS['stage_created_title']}** | {status}\n\n{member.mention} {TEXTS['stage_created_desc']} dans {stage_channel.mention}"
+            embed.title = f"{emoji} **{TEXTS['stage_created_title']}** | {status}"
+            embed.description = f"{member.mention} {TEXTS['stage_created_desc']} dans {stage_channel.mention}"
             if topic:
                 embed.add_field(name=TEXTS["topic_field"], value=topic, inline=False)
             embed.add_field(name=TEXTS["voice_channel"], value=stage_channel.mention, inline=False)
             embed.set_footer(text=self._footer(STAGE_LOG_TYPES[action_type], member.id))
 
         elif action_type == "speaker_added":
-            embed.description = f"{emoji} **{TEXTS['stage_speaker_added_title']}**\n\n{invited_member.mention} à accepté de devenir intervenant dans {stage_channel.mention}"
+            embed.title = f"{emoji} **{TEXTS['stage_speaker_added_title']}**"
+            embed.description = f"{invited_member.mention} à accepté de devenir intervenant dans {stage_channel.mention}"
+ 
             embed.set_footer(text=self._footer(STAGE_LOG_TYPES[action_type], invited_member.id))
 
         elif action_type == "speaker_invited":
-            embed.description = f"{emoji} **{TEXTS['stage_speaker_invited_title']}**\n\n{invited_member.mention} à été invité à devenir intervenant dans {stage_channel.mention}"
+            embed.title = f"{emoji} **{TEXTS['stage_speaker_invited_title']}**"
+            embed.description = f"{invited_member.mention} à été invité à devenir intervenant dans {stage_channel.mention}"
+    
             embed.set_footer(text=self._footer(STAGE_LOG_TYPES[action_type], invited_member.id))
 
         elif action_type == "speaker_self":
-            embed.description = f"{emoji} **{TEXTS['stage_speaker_self_title']}**\n\n{member.mention} {TEXTS['stage_speaker_self_desc']} {stage_channel.mention}"
+            embed.title = f"{emoji} **{TEXTS['stage_speaker_self_title']}**"
+            embed.description = f"{member.mention} {TEXTS['stage_speaker_self_desc']} {stage_channel.mention}"
             embed.set_footer(text=self._footer(STAGE_LOG_TYPES[action_type], member.id))
 
         elif action_type == "deleted":
-            embed.description = f"{emoji} **{TEXTS['stage_deleted_title']}**\n\nLa conférence {stage_channel.mention} {TEXTS['stage_deleted_desc']} {member.mention}"
+            embed.title = f"{emoji} **{TEXTS['stage_deleted_title']}**"
+            embed.description = f"La conférence {stage_channel.mention} {TEXTS['stage_deleted_desc']} {member.mention}"
+
             embed.add_field(name=TEXTS["voice_channel"], value=stage_channel.mention, inline=False)
             embed.set_footer(text=self._footer(STAGE_LOG_TYPES[action_type], member.id))
 
         elif action_type == "speaker_removed":
-            embed.description = f"{emoji} **{TEXTS['stage_speaker_removed_title']}**\n\n{member.mention} {TEXTS['stage_speaker_removed_desc']} dans {stage_channel.mention}"
+            embed.title = f"{emoji} **{TEXTS['stage_speaker_removed_title']}**"
+            embed.description = f"{member.mention} {TEXTS['stage_speaker_removed_desc']} dans {stage_channel.mention}"
             embed.add_field(name=TEXTS["voice_channel"], value=stage_channel.mention, inline=False)
             embed.set_footer(text=self._footer(STAGE_LOG_TYPES[action_type], member.id))
 
@@ -3399,10 +3443,8 @@ class Logs(commands.Cog):
 
         embed = discord.Embed(color=VOICE_COLORS[action_key])
         embed.set_author(name=moderator.display_name, icon_url=moderator.display_avatar.url)
-        embed.description = (
-            f'{CUSTOM_EMOJIS["vocstatutchannel"]} **{TEXTS[f"voice_{action_key}_title"]}**\n'
-            f'{moderator.mention} {TEXTS[f"voice_{action_key}_desc"]} {channel.mention}'
-        )
+        embed.title = f'{CUSTOM_EMOJIS["vocstatutchannel"]} **{TEXTS[f"voice_{action_key}_title"]}**'
+        embed.description = f'{moderator.mention} {TEXTS[f"voice_{action_key}_desc"]} {channel.mention}'
 
         if is_set:
             embed.add_field(name=TEXTS["voice_status_label"], value=str(status), inline=False)
@@ -3413,13 +3455,15 @@ class Logs(commands.Cog):
 
     # --- LOGS ÉVÉNEMENTS ---
 
-    def _build_event_embed(self, color, description, event=None, user=None, log_type="event_edited"):
+    def _build_event_embed(self, color, description, event=None, user=None, log_type="event_edited", title=None):
         """Construit un embed standard pour les logs d'événements."""
         embed = discord.Embed(color=color)
         embed.set_author(
             name=user.display_name if user else TEXTS["unknown"],
             icon_url=user.display_avatar.url if user else None
         )
+        if title:
+            embed.title = title
         embed.description = description
         if event and event.cover_image:
             embed.set_thumbnail(url=event.cover_image.url)
@@ -3445,9 +3489,9 @@ class Logs(commands.Cog):
 
         embed = self._build_event_embed(
             EVENT_COLORS["created"],
-            f'{EVENT_EMOJIS["created"]} **{TEXTS["event_created_title"]}**\n\n'
             f"L'évènement [{event.name}]({event.url}) a été créé par {user.mention if user else TEXTS['unknown']}",
-            event=event, user=user, log_type="event_created"
+            event=event, user=user, log_type="event_created",
+            title=f'{EVENT_EMOJIS["created"]} **{TEXTS["event_created_title"]}**'
         )
 
         description = event.description or TEXTS["event_no_description"]
@@ -3473,9 +3517,9 @@ class Logs(commands.Cog):
 
         embed = self._build_event_embed(
             EVENT_COLORS["deleted"],
-            f'{EVENT_EMOJIS["deleted"]} **{TEXTS["event_deleted_title"]}**\n\n'
             f"L'évènement `{event.name}` a été supprimé par {moderator.mention if moderator else TEXTS['unknown']}",
-            user=moderator, log_type="event_deleted"
+            user=moderator, log_type="event_deleted",
+            title=f'{EVENT_EMOJIS["deleted"]} **{TEXTS["event_deleted_title"]}**'
         )
 
         await channel.send(embed=embed)
@@ -3534,12 +3578,12 @@ class Logs(commands.Cog):
         if not has_content:
             return
 
-        desc = (
-            f'{EVENT_EMOJIS["edited"]} **{TEXTS["event_edited_title"]}**\n\n'
-            f"L'évènement [{after.name}]({after.url}) a été modifié par {mod_mention}"
-        )
+        desc = f"L'évènement [{after.name}]({after.url}) a été modifié par {mod_mention}"
 
-        embed = self._build_event_embed(EVENT_COLORS["edited"], desc, event=after, user=moderator)
+        embed = self._build_event_embed(
+            EVENT_COLORS["edited"], desc, event=after, user=moderator,
+            title=f'{EVENT_EMOJIS["edited"]} **{TEXTS["event_edited_title"]}**'
+        )
 
         if has_name:
             embed.add_field(name=TEXTS["event_new_name_field"], value=f"`{after.name}`", inline=False)

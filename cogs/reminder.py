@@ -335,10 +335,8 @@ class Reminder(commands.Cog):
             try:
                 embed = discord.Embed(color=discord.Color(int("00FF00", 16)))  # Vert
                 embed.set_author(name=creator.display_name, icon_url=creator.display_avatar.url)
-                embed.description = (
-                    f'{CUSTOM_EMOJIS["allow"]} **{TEXTS["reminder_created_title"]}**\n'
-                    f'{TEXTS["reminder_created_desc"]}'
-                )
+                embed.title = f'{CUSTOM_EMOJIS["allow"]} **{TEXTS["reminder_created_title"]}**'
+                embed.description = f'{TEXTS["reminder_created_desc"]}'
                 embed.add_field(name=TEXTS["reminder_role_field"], value=f"<@&{role_id}>", inline=True)
                 embed.add_field(
                     name=TEXTS["reminder_trigger_field"],
@@ -394,10 +392,8 @@ class Reminder(commands.Cog):
             try:
                 embed = discord.Embed(color=discord.Color(int("FF0000", 16)))  # Rouge
                 embed.set_author(name=deleted_by.display_name, icon_url=deleted_by.display_avatar.url)
-                embed.description = (
-                    f'{CUSTOM_EMOJIS["deny"]} **{TEXTS["reminder_deleted_title"]}**\n'
-                    f'{TEXTS["reminder_deleted_desc"]}'
-                )
+                embed.title = f'{CUSTOM_EMOJIS["deny"]} **{TEXTS["reminder_deleted_title"]}**'
+                embed.description = f'{TEXTS["reminder_deleted_desc"]}'
                 embed.add_field(name="Rappel", value=f"**{r['name']}**", inline=False)
                 embed.add_field(name=TEXTS["member_by"], value=deleted_by.mention, inline=False)
                 embed.set_footer(
@@ -427,10 +423,9 @@ class Reminder(commands.Cog):
             try:
                 embed = discord.Embed(color=discord.Color(int("FF0000", 16)))  # Rouge
                 embed.set_author(name=deleted_by.display_name, icon_url=deleted_by.display_avatar.url)
-                embed.description = (
-                    f'{CUSTOM_EMOJIS["deny"]} **{TEXTS["reminder_deleted_title"]}**\n'
-                    f'{count} rappel(s) supprimé(s)'
-                )
+                embed.title = f'{CUSTOM_EMOJIS["deny"]} **{TEXTS["reminder_deleted_title"]}**'
+                embed.description = f'{count} rappel(s) supprimé(s)'
+
                 embed.add_field(name=TEXTS["member_by"], value=deleted_by.mention, inline=False)
                 embed.set_footer(
                     text=f'{_log_id_for("reminder_delete")} • ID: {deleted_by.id} • {get_timestamp()}'
@@ -456,10 +451,8 @@ class Reminder(commands.Cog):
         description = r.get("description") or TEXTS["reminder_auto_default"]
         content = f'<@&{r["role_id"]}>'
         embed = discord.Embed(color=discord.Color(int("B821FF", 16)))  # Violet
-        embed.description = (
-            f'{CUSTOM_EMOJIS["info"]} **RAPPEL {r["name"]}**\n'
-            f'{description}'
-        )
+        embed.title = f'{CUSTOM_EMOJIS["info"]} **RAPPEL {r["name"]}**'
+        embed.description = f'{description}'
         embed.set_footer(text=f'{_log_id_for("reminder_auto")} • {get_timestamp()}')
 
         try:
@@ -584,10 +577,8 @@ class Reminder(commands.Cog):
         if log_channel:
             try:
                 embed = discord.Embed(color=discord.Color(int("B821FF", 16)))  # Violet
-                embed.description = (
-                    f'{CUSTOM_EMOJIS["info"]} **{TEXTS["bump_reminder_log_title"]}**\n'
-                    f'{TEXTS["bump_reminder_log_desc"]}'
-                )
+                embed.title = f'{CUSTOM_EMOJIS["info"]} **{TEXTS["bump_reminder_log_title"]}**'
+                embed.description = f'{TEXTS["bump_reminder_log_desc"]}'
                 embed.add_field(
                     name=TEXTS["reminder_trigger_field"],
                     value=f"<t:{int(datetime.now(timezone.utc).timestamp()) + BUMP_REMINDER_DELAY_SECONDS}:R>",
@@ -644,10 +635,8 @@ class Reminder(commands.Cog):
 
         content = f"<@&{BUMP_REMINDER_ROLE_ID}>" if BUMP_REMINDER_ROLE_ID else None
         embed = discord.Embed(color=discord.Color(int("B821FF", 16)))  # Violet
-        embed.description = (
-            f'{CUSTOM_EMOJIS["info"]} **{TEXTS["bump_reminder_title"]}**\n'
-            f'{TEXTS["bump_reminder_desc"]}'
-        )
+        embed.title = f'{CUSTOM_EMOJIS["info"]} **{TEXTS["bump_reminder_title"]}**'
+        embed.description = f'{TEXTS["bump_reminder_desc"]}'
         embed.set_footer(text=f'{_log_id_for("bump_reminder")} • {get_timestamp()}')
 
         try:

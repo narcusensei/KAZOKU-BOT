@@ -582,7 +582,8 @@ class Moderation(commands.Cog):
                 # Suppression d'une sanction spécifique
                 embed = discord.Embed(color=discord.Color(int("FF0000", 16)))  # Rouge
                 embed.set_author(name=moderator.display_name, icon_url=moderator.display_avatar.url)
-                embed.description = f'{CUSTOM_EMOJIS["deleted"]} **{TEXTS["sanction_deleted_log_title"]}**\n{TEXTS["sanction_deleted_log_desc"]}'
+                embed.title = f'{CUSTOM_EMOJIS["deleted"]} **{TEXTS["sanction_deleted_log_title"]}**'
+                embed.description = f'{TEXTS["sanction_deleted_log_desc"]}'
                 embed.add_field(name=TEXTS["sanction_deleted_target_field"], value=f"<@{user_id}>", inline=True)
                 embed.add_field(name="Type", value=f"`{sanction.get('type', '?')}`", inline=True)
                 embed.add_field(name=TEXTS["sanctionlist_reason"], value=truncate_text(sanction.get('reason', '?'), 500), inline=False)
@@ -593,7 +594,8 @@ class Moderation(commands.Cog):
                 # Suppression de toutes les sanctions
                 embed = discord.Embed(color=discord.Color(int("8B0000", 16)))  # Rouge foncé
                 embed.set_author(name=moderator.display_name, icon_url=moderator.display_avatar.url)
-                embed.description = f'{CUSTOM_EMOJIS["deleted"]} **{TEXTS["sanction_all_deleted_log_title"]}**\n{TEXTS["sanction_all_deleted_log_desc"].format(count=count)}'
+                embed.title = f'{CUSTOM_EMOJIS["deleted"]} **{TEXTS["sanction_all_deleted_log_title"]}**'
+                embed.description = f'{TEXTS["sanction_all_deleted_log_desc"].format(count=count)}'
                 embed.add_field(name=TEXTS["sanction_deleted_target_field"], value=f"<@{user_id}>", inline=True)
                 embed.add_field(name=TEXTS["sanction_deleted_by_field"], value=moderator.mention, inline=False)
                 embed.set_footer(text=f'#L103 • ID: {moderator.id} • {datetime.now(ZoneInfo("Europe/Paris")).strftime("%d/%m/%Y %H:%M")}')
@@ -707,7 +709,8 @@ class Moderation(commands.Cog):
 
         embed = discord.Embed(color=SANCTION_COLORS.get("Mute"))
         embed.set_author(name=user.display_name, icon_url=user.display_avatar.url)
-        embed.description = f'{CUSTOM_EMOJIS[SANCTION_CUSTOM_EMOJIS["Mute"]]} **{TEXTS["mute_title"]}**\n\n**{user.name}** {TEXTS["mute_description"].format(dur=dur_str)}'
+        embed.title = f'{CUSTOM_EMOJIS[SANCTION_CUSTOM_EMOJIS["Mute"]]} **{TEXTS["mute_title"]}**'
+        embed.description = f'**{user.name}** {TEXTS["mute_description"].format(dur=dur_str)}'
         if reason:
             embed.add_field(name=TEXTS["mute_reason"], value=truncate_text(reason, 1000))
         await send_auto_delete(ctx,embed=embed)
@@ -759,7 +762,8 @@ class Moderation(commands.Cog):
 
         embed = discord.Embed(color=SANCTION_COLORS.get("Unmute"))
         embed.set_author(name=user.display_name, icon_url=user.display_avatar.url)
-        embed.description = f'{CUSTOM_EMOJIS[SANCTION_CUSTOM_EMOJIS["Unmute"]]} **{TEXTS["unmute_title"]}**\n\n**{user.name}** {TEXTS["unmute_description"]}'
+        embed.title = f'{CUSTOM_EMOJIS[SANCTION_CUSTOM_EMOJIS["Unmute"]]} **{TEXTS["unmute_title"]}**'
+        embed.description = f'**{user.name}** {TEXTS["unmute_description"]}'
         await send_auto_delete(ctx,embed=embed)
 
     @commands.hybrid_command(name="kick", description="Kick un membre (Kick a member)")
@@ -786,7 +790,8 @@ class Moderation(commands.Cog):
 
         embed = discord.Embed(color=SANCTION_COLORS.get("Kick"))
         embed.set_author(name=user.display_name, icon_url=user.display_avatar.url)
-        embed.description = f'{CUSTOM_EMOJIS[SANCTION_CUSTOM_EMOJIS["Kick"]]} **{TEXTS["kick_title"]}**\n\n**{user.name}** {TEXTS["kick_description"]}'
+        embed.title = f'{CUSTOM_EMOJIS[SANCTION_CUSTOM_EMOJIS["Kick"]]} **{TEXTS["kick_title"]}**'
+        embed.description = f'**{user.name}** {TEXTS["kick_description"]}'
         if reason:
             embed.add_field(name=TEXTS["mute_reason"], value=truncate_text(reason, 1000))
         await send_auto_delete(ctx,embed=embed)
@@ -825,7 +830,8 @@ class Moderation(commands.Cog):
 
         embed = discord.Embed(color=SANCTION_COLORS.get("Ban"))
         embed.set_author(name=user.display_name, icon_url=user.display_avatar.url)
-        embed.description = f'{CUSTOM_EMOJIS[SANCTION_CUSTOM_EMOJIS["Ban"]]} **{TEXTS["ban_title"]}**\n\n**{user.name}** {TEXTS["ban_description"]}'
+        embed.title = f'{CUSTOM_EMOJIS[SANCTION_CUSTOM_EMOJIS["Ban"]]} **{TEXTS["ban_title"]}**'
+        embed.description = f'**{user.name}** {TEXTS["ban_description"]}'
         if reason:
             embed.add_field(name=TEXTS["mute_reason"], value=truncate_text(reason, 1000))
         await send_auto_delete(ctx,embed=embed)
@@ -870,7 +876,8 @@ class Moderation(commands.Cog):
 
         embed = discord.Embed(color=SANCTION_COLORS.get("Unban"))
         embed.set_author(name=user_to_unban.display_name, icon_url=user_to_unban.display_avatar.url)
-        embed.description = f'{CUSTOM_EMOJIS[SANCTION_CUSTOM_EMOJIS["Unban"]]} **{TEXTS["unban_title"]}**\n\n**{user_to_unban.name}** {TEXTS["unban_description"]}'
+        embed.title = f'{CUSTOM_EMOJIS[SANCTION_CUSTOM_EMOJIS["Unban"]]} **{TEXTS["unban_title"]}**'
+        embed.description = f'**{user_to_unban.name}** {TEXTS["unban_description"]}'
         await send_auto_delete(ctx,embed=embed)
 
     @commands.hybrid_command(name="avert", description="Avertir un utilisateur (Warn a user)")
@@ -907,7 +914,8 @@ class Moderation(commands.Cog):
 
         embed = discord.Embed(color=SANCTION_COLORS.get("Avertissement"))
         embed.set_author(name=user.display_name, icon_url=user.display_avatar.url)
-        embed.description = f'{CUSTOM_EMOJIS[SANCTION_CUSTOM_EMOJIS["Avertissement"]]} **{TEXTS["avert_title"]}**\n\n**{user.name}** {TEXTS["avert_description"].format(count=count)}'
+        embed.title = f'{CUSTOM_EMOJIS[SANCTION_CUSTOM_EMOJIS["Avertissement"]]} **{TEXTS["avert_title"]}**'
+        embed.description = f'**{user.name}** {TEXTS["avert_description"].format(count=count)}'
         embed.add_field(name=TEXTS["mute_reason"], value=truncate_text(reason, 1000))
         await send_auto_delete(ctx,embed=embed)
 
