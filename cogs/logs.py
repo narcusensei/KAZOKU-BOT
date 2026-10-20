@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 
 import discord
+import aiohttp
 from discord.ext import commands
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
@@ -470,31 +471,55 @@ class Logs(commands.Cog):
             self._cache_attachment_cleanup()
 
     async def _get_moderator_from_audit_log(self, guild, target_id, action_types, time_window: int = 120, limit: int = AUDIT_LOG_LIMIT):
-        """Recherche un modérateur dans les audit logs.
+        """Recherche un modérateur dans les audit logs (REST direct).
 
-        Protégée par un timeout : si l'appel audit log bloque (rate limit ou
-        réseau), on rend la main et la log partira sans l'info modérateur
-        plutôt que de ne jamais partir.
+        Contournement : le client HTTP interne de discord.py peut bloquer
+        indéfiniment sur ce bucket (2e appel) alors que tout le reste marche —
+        voir CLAUDE.md « Pièges rencontrés ». Appel REST autonome avec timeout
+        dur, éprouvé fiable depuis la VM.
         """
-        async def search():
-            async for entry in guild.audit_logs(limit=limit):
-                if target_id is not None:
-                    if not (entry.target and hasattr(entry.target, 'id') and entry.target.id == target_id):
-                        continue
-                if action_types and entry.action not in action_types:
-                    continue
-                log_time = entry.created_at
-                if (datetime.now(timezone.utc) - log_time).total_seconds() < time_window:
-                    return entry.user
+        try:
+            timeout = aiohttp.ClientTimeout(total=10)
+            headers = {'Authorization': 'Bot ' + self.bot.http.token}
+            params = {'limit': min(limit, 100)}
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(
+                    f'https://discord.com/api/v10/guilds/{guild.id}/audit-logs',
+                    headers=headers, params=params
+                ) as resp:
+                    if resp.status != 200:
+                        return None
+                    data = await resp.json()
+        except (aiohttp.ClientError, asyncio.TimeoutError, Exception):
             return None
 
-        try:
-            return await asyncio.wait_for(search(), timeout=AUDIT_LOG_CALL_TIMEOUT)
-        except asyncio.TimeoutError:
-            print("⚠️ Audit log injoignable (timeout) : log envoyée sans info modérateur", file=sys.stderr)
-            return None
-        except (discord.Forbidden, discord.HTTPException, AttributeError):
-            return None
+        users = {u['id']: u for u in data.get('users', [])}
+        actions_values = {a.value for a in action_types} if action_types else None
+        now_ms = datetime.now(timezone.utc).timestamp() * 1000
+
+        for entry in data.get('audit_log_entries', []):
+            if actions_values is not None and entry.get('action_type') not in actions_values:
+                continue
+            if target_id is not None and str(entry.get('target_id')) != str(target_id):
+                continue
+            # snowflake -> timestamp (ms)
+            ts_ms = (int(entry['id']) >> 22) + 1420070400000
+            if (now_ms - ts_ms) / 1000 > time_window:
+                continue
+            user_id = entry.get('user_id')
+            if not user_id:
+                return None
+            member = guild.get_member(int(user_id)) or self.bot.get_user(int(user_id))
+            if member is not None:
+                return member
+            raw = users.get(user_id, {})
+            import types as _types
+            return _types.SimpleNamespace(
+                id=int(user_id),
+                mention=f'<@{user_id}>',
+                display_name=raw.get('global_name') or raw.get('username') or str(user_id)
+            )
+        return None
 
     def _get_mod_info(self, moderator):
         """Retourne (name, avatar_url, mention) d'un modérateur."""
