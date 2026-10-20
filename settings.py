@@ -1246,6 +1246,10 @@ MAX_SANCTIONS_SELECT = 24
 
 # Logs
 AUDIT_LOG_TIMEOUT = 5
+
+# Timeout de l'appel HTTP audit_logs() : si Discord/réseau bloque, rendre la
+# main et logger sans info modérateur plutôt que de bloquer la log indéfiniment
+AUDIT_LOG_CALL_TIMEOUT = 15
 AUDIT_LOG_LIMIT = 100
 THREAD_REOPEN_THRESHOLD = 120  # secondes
 CONTENT_MAX_LENGTH = 1000  # < 1024 : laisse la marge pour les préfixes de formatage (">>> " etc.)

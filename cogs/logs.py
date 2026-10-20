@@ -19,6 +19,7 @@ from settings import (
     SERVER_COLORS, CHANNEL_COLORS, WEBHOOK_COLORS, ROLE_COLORS, DEFAULT_COLOR,
     AUDIT_LOG_LIMIT, CONTENT_MAX_LENGTH, MEMBERS_FILE, DATA_DIR, truncate_text,
     AUDIT_LOG_DELAY_SHORT, AUDIT_LOG_DELAY_DEFAULT, AUDIT_LOG_DELAY_LONG, AUDIT_LOG_DELAY_SLOW,
+    AUDIT_LOG_CALL_TIMEOUT,
     LOG_TYPE_IDS, PERMISSION_LABELS_FR, DANGEROUS_PERMISSIONS,
     MAX_ATTACHMENT_CACHE_SIZE, ATTACHMENT_CACHE_TTL, MAX_ATTACHMENT_FILE_SIZE,
     GIVEAWAY_COLOR
@@ -469,8 +470,13 @@ class Logs(commands.Cog):
             self._cache_attachment_cleanup()
 
     async def _get_moderator_from_audit_log(self, guild, target_id, action_types, time_window: int = 120, limit: int = AUDIT_LOG_LIMIT):
-        """Recherche un modérateur dans les audit logs."""
-        try:
+        """Recherche un modérateur dans les audit logs.
+
+        Protégée par un timeout : si l'appel audit log bloque (rate limit ou
+        réseau), on rend la main et la log partira sans l'info modérateur
+        plutôt que de ne jamais partir.
+        """
+        async def search():
             async for entry in guild.audit_logs(limit=limit):
                 if target_id is not None:
                     if not (entry.target and hasattr(entry.target, 'id') and entry.target.id == target_id):
@@ -480,9 +486,15 @@ class Logs(commands.Cog):
                 log_time = entry.created_at
                 if (datetime.now(timezone.utc) - log_time).total_seconds() < time_window:
                     return entry.user
+            return None
+
+        try:
+            return await asyncio.wait_for(search(), timeout=AUDIT_LOG_CALL_TIMEOUT)
+        except asyncio.TimeoutError:
+            print("⚠️ Audit log injoignable (timeout) : log envoyée sans info modérateur", file=sys.stderr)
+            return None
         except (discord.Forbidden, discord.HTTPException, AttributeError):
-            pass
-        return None
+            return None
 
     def _get_mod_info(self, moderator):
         """Retourne (name, avatar_url, mention) d'un modérateur."""
@@ -1034,13 +1046,10 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_message_delete(self, message):
         """Se déclenche lors d'une suppression manuelle."""
-        print(f"🔍 [DEBUG-DELETE] événement reçu : message {message.id} dans {message.channel}", file=sys.stderr)
         if not message.guild:
-            print("🔍 [DEBUG-DELETE] sortie : message hors serveur (guild absent)", file=sys.stderr)
             return
         channel = self._get_log_channel("message")
         if not channel:
-            print("🔍 [DEBUG-DELETE] sortie : channel 'message' introuvable (LOG_CHANNELS)", file=sys.stderr)
             return
 
         # Log sondage supprimé
@@ -1051,7 +1060,6 @@ class Logs(commands.Cog):
             poll_message = self.poll_cache[message.id]
 
         if poll_message:
-            print(f"🔍 [DEBUG-DELETE] branche SONDAGE (message {poll_message.id})", file=sys.stderr)
             try:
                 poll = poll_message.poll
 
@@ -1104,30 +1112,16 @@ class Logs(commands.Cog):
                     del self.poll_cache[message.id]
                 return
             except Exception:
-                import traceback
-                print("❌ [DEBUG-DELETE] exception dans la branche sondage :", file=sys.stderr)
-                traceback.print_exc()
                 return
 
         # Log message classique supprimé
         if not message.content and not message.attachments:
-            print(f"🔍 [DEBUG-DELETE] sortie : message {message.id} sans contenu ni pièce jointe "
-                  f"(non caché par le bot ? envoyé avant le démarrage ?)", file=sys.stderr)
             return
 
-        print("🔍 [DEBUG-DELETE] avant appel audit log...", file=sys.stderr)
-        try:
-            deleted_by = await asyncio.wait_for(
-                self._get_moderator_from_audit_log(
-                    message.guild, message.author.id,
-                    [discord.AuditLogAction.message_delete]
-                ),
-                timeout=15
-            )
-        except asyncio.TimeoutError:
-            print("⏱️ [DEBUG-DELETE] audit log bloquée (timeout 15s), poursuite sans modérateur", file=sys.stderr)
-            deleted_by = None
-        print(f"🔍 [DEBUG-DELETE] après audit : {deleted_by}", file=sys.stderr)
+        deleted_by = await self._get_moderator_from_audit_log(
+            message.guild, message.author.id,
+            [discord.AuditLogAction.message_delete]
+        )
         if deleted_by and deleted_by.id == message.author.id:
             deleted_by = None
 
@@ -1150,11 +1144,7 @@ class Logs(commands.Cog):
         if deleted_by:
             embed.add_field(name=TEXTS["message_deleted_by"], value=deleted_by.mention, inline=False)
         embed.set_footer(text=self._footer("message_delete", message.author.id))
-        try:
-            await channel.send(embed=embed)
-            print(f"✅ [DEBUG-DELETE] log envoyée (message {message.id})", file=sys.stderr)
-        except Exception as e:
-            print(f"❌ [DEBUG-DELETE] échec envoi : {type(e).__name__}: {e}", file=sys.stderr)
+        await channel.send(embed=embed)
 
         # Log pièces jointes supprimées dans le channel fichier
         if message.attachments:
