@@ -1034,12 +1034,13 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_message_delete(self, message):
         """Se déclenche lors d'une suppression manuelle."""
-        print(f"🔍 [DEBUG-DELETE] événement reçu : message {message.id} dans {message.channel}")
+        print(f"🔍 [DEBUG-DELETE] événement reçu : message {message.id} dans {message.channel}", file=sys.stderr)
         if not message.guild:
+            print("🔍 [DEBUG-DELETE] sortie : message hors serveur (guild absent)", file=sys.stderr)
             return
         channel = self._get_log_channel("message")
         if not channel:
-            print("🔍 [DEBUG-DELETE] sortie : channel 'message' introuvable (LOG_CHANNELS)")
+            print("🔍 [DEBUG-DELETE] sortie : channel 'message' introuvable (LOG_CHANNELS)", file=sys.stderr)
             return
 
         # Log sondage supprimé
@@ -1050,6 +1051,7 @@ class Logs(commands.Cog):
             poll_message = self.poll_cache[message.id]
 
         if poll_message:
+            print(f"🔍 [DEBUG-DELETE] branche SONDAGE (message {poll_message.id})", file=sys.stderr)
             try:
                 poll = poll_message.poll
 
@@ -1102,12 +1104,15 @@ class Logs(commands.Cog):
                     del self.poll_cache[message.id]
                 return
             except Exception:
+                import traceback
+                print("❌ [DEBUG-DELETE] exception dans la branche sondage :", file=sys.stderr)
+                traceback.print_exc()
                 return
 
         # Log message classique supprimé
         if not message.content and not message.attachments:
             print(f"🔍 [DEBUG-DELETE] sortie : message {message.id} sans contenu ni pièce jointe "
-                  f"(non caché par le bot ? envoyé avant le démarrage ?)")
+                  f"(non caché par le bot ? envoyé avant le démarrage ?)", file=sys.stderr)
             return
 
         deleted_by = await self._get_moderator_from_audit_log(
@@ -1138,9 +1143,9 @@ class Logs(commands.Cog):
         embed.set_footer(text=self._footer("message_delete", message.author.id))
         try:
             await channel.send(embed=embed)
-            print(f"✅ [DEBUG-DELETE] log envoyée (message {message.id})")
+            print(f"✅ [DEBUG-DELETE] log envoyée (message {message.id})", file=sys.stderr)
         except Exception as e:
-            print(f"❌ [DEBUG-DELETE] échec envoi : {type(e).__name__}: {e}")
+            print(f"❌ [DEBUG-DELETE] échec envoi : {type(e).__name__}: {e}", file=sys.stderr)
 
         # Log pièces jointes supprimées dans le channel fichier
         if message.attachments:
