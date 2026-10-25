@@ -807,6 +807,28 @@ TEXTS = {
     "embed_log_title":                  "CRÉATION EMBED",
     "embed_log_desc":                   "Création d'un nouvel embed",
 
+    # --- Rôles à réaction ---
+    "rr_usage":                         "Utilisation : `/reactionrole add [messageID] [emoji1 rôle1] [emoji2 rôle2]…` — `/reactionrole remove …` — `/reactionrole removeall [messageID]`",
+    "rr_added_ok":                      "✅ Rôles à réaction ajoutés sur le message !",
+    "rr_removed_ok":                    "✅ Rôles à réaction retirés du message !",
+    "rr_removedall_ok":                 "✅ Tous les rôles à réaction ont été retirés du message !",
+    "rr_err_guild_only":                "❌ Cette commande doit être utilisée dans un serveur.",
+    "rr_err_message_not_found":         "❌ Message introuvable. Vérifie l'ID (et que le bot peut voir le salon du message).",
+    "rr_err_odd_pairs":                 "❌ Arguments invalides : il faut des paires `emoji rôleID` (nombre pair d'éléments).",
+    "rr_err_bad_emoji":                 "❌ Émoji invalide : `{emoji}`. Utilise un émoji Unicode ou un émoji personnalisé (`<:nom:ID>`).",
+    "rr_err_role_not_found":            "❌ Rôle introuvable : `{role}`. Donne l'ID du rôle.",
+    "rr_err_role_too_high":             "❌ Le rôle {role} est au-dessus du plus haut rôle du bot : impossible de le donner.",
+    "rr_err_no_config":                 "❌ Aucun rôle à réaction configuré sur ce message.",
+    "rr_err_nothing_removed":           "❌ Aucune paire correspondante trouvée sur ce message.",
+    "rr_log_add_title":                 "RÔLES À RÉACTION AJOUTÉS",
+    "rr_log_add_desc":                  "{count} liaison(s) émoji → rôle configurée(s) sur un message",
+    "rr_log_remove_title":              "RÔLES À RÉACTION RETIRÉS",
+    "rr_log_remove_desc":               "{count} liaison(s) émoji → rôle retirée(s) d'un message",
+    "rr_log_removeall_title":           "RÔLES À RÉACTION VIDÉS",
+    "rr_log_removeall_desc":            "Toutes les liaisons émoji → rôle ont été retirées d'un message",
+    "rr_log_message_field":             "Message",
+    "rr_log_pairs_field":               "Liaisons",
+
     # --- Logs : rôles serveur ---
     "role_created_title":               "RÔLE CRÉÉ",
     "role_deleted_title":               "RÔLE SUPPRIMÉ",
@@ -1026,7 +1048,10 @@ PERMISSIONS = {
     "reminderlist":  ["+", "~"],
 
     # Outils
-    "embed":         ["+", "~"]
+    "embed":         ["+", "~"],
+
+    # Rôles à réaction
+    "reactionrole":  ["+", "~"]
 }
 
 SANCTION_TYPES = ["Ban", "Kick", "Mute", "Avertissement"]
@@ -1040,6 +1065,7 @@ MEMBERS_FILE = "data/members.json"
 GIVEAWAYS_FILE = "data/giveaways.json"
 REMINDERS_FILE = "data/reminders.json"
 BUMP_REMINDERS_FILE = "data/bump_reminders.json"
+REACTION_ROLES_FILE = "data/reaction_roles.json"
 
 
 # ================ DISBOARD / BUMP ===========================
@@ -1200,6 +1226,11 @@ LOG_TYPE_IDS = {
 
     # --- Embeds personnalisés (#L105) ---
     "embed_create":          105,
+
+    # --- Rôles à réaction (#L106 - #L108) ---
+    "reaction_role_add":        106,
+    "reaction_role_remove":     107,
+    "reaction_role_removeall":  108,
 
     # --- Invitations (#L56 - #L57) ---
     "invite_create":          56,

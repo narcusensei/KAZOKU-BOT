@@ -346,7 +346,11 @@ class Base(commands.Cog):
             "**Reroll** - `/greroll ou +greroll [ID]`\n"
             "━━━━━━━ ⏰ **RAPPEL** ━━━━━━━\n"
             "**Créer** - `/reminder ou +reminder`\n"
-            "**Liste** - `/reminderlist ou +reminderlist`"
+            "**Liste** - `/reminderlist ou +reminderlist`\n"
+            "━━━━━━━ 🎭 **RÔLES À RÉACTION** ━━━━━━━\n"
+            "**Ajouter** - `/reactionrole add ou +reactionrole add [messageID] [emoji rôleID]…`\n"
+            "**Retirer** - `/reactionrole remove ou +reactionrole remove [messageID] [emoji rôleID]…`\n"
+            "**Tout retirer** - `/reactionrole removeall ou +reactionrole removeall [messageID]`"
         )
 
         embed = discord.Embed(color=discord.Color(int("B821FF", 16)))  # Violet

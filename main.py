@@ -39,7 +39,8 @@ COGS_EXTENSIONS: List[str] = [
     "cogs.moderation",
     "cogs.logs",
     "cogs.giveaway",
-    "cogs.reminder"
+    "cogs.reminder",
+    "cogs.reactionrole"
 ]
 
 # --- CONFIGURATION ---
