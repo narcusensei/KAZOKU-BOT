@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from discord.ext import commands, tasks
 
 from settings import (
-    TEXTS, CUSTOM_EMOJIS,
+    TEXTS, CUSTOM_EMOJIS, GUILD_ID,
     REMINDERS_FILE, DATA_DIR,
     DISBOARD_BOT_ID, BUMP_REMINDER_ENABLED, BUMP_REMINDER_DELAY_SECONDS,
     BUMP_REMINDER_ROLE_ID, BUMP_SUCCESS_PHRASES, BUMP_REMINDERS_FILE
@@ -541,7 +541,7 @@ class Reminder(commands.Cog):
         ("Bump effectué" / "Bump done"). Un bump refusé (cooldown) a un contenu
         différent ("attendez X minutes") et ne déclenche donc rien.
         """
-        if not BUMP_REMINDER_ENABLED or not message.guild:
+        if not BUMP_REMINDER_ENABLED or not message.guild or message.guild.id != GUILD_ID:
             return
         if message.author.id != DISBOARD_BOT_ID:
             return

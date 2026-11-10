@@ -1,0 +1,16 @@
+# Ruff — linter Python (dev local : `ruff check .`)
+# On garde une config volontairement permissive (le code est long en lignes) :
+# E/W/F = erreurs pyflakes/pycodage de base, longueur de ligne non imposée.
+
+line-length = 130
+target-version = "py312"
+
+extend-exclude = [
+    "backup_2026-07-02",  # copie archivée, hors maintenance
+    "data",
+    "img",
+]
+
+[lint]
+select = ["E", "W", "F"]
+ignore = ["E501"]

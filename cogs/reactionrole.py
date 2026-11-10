@@ -9,7 +9,6 @@ import re
 import sys
 from discord import app_commands
 from discord.ext import commands
-from datetime import datetime, timezone
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from settings import (
@@ -17,7 +16,6 @@ from settings import (
 )
 from cogs.base import send_auto_delete
 
-from cogs.logs import get_timestamp, _log_id_for
 
 RR_COLOR = "B821FF"  # Violet (identité du bot)
 
@@ -80,10 +78,29 @@ class ReactionRole(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        self._rr_cache = None  # cache mémoire de la config (invalidé à chaque écriture)
 
     @commands.Cog.listener()
     async def on_ready(self):
         print("📦 Cog 'ReactionRole' chargé.")
+
+    # --- ACCÈS CONFIG (cache mémoire : plus de lecture disque par réaction) ---
+
+    def _get_rr_config(self) -> dict:
+        """Config des rôles à réaction, depuis le cache (chargé une seule fois).
+
+        Le cache vit tant que le bot tourne : il n'est invalidé QUE par
+        _save_rr_config (seul writer possible — processus unique, verrou
+        d'instance au démarrage). Si le JSON est édité à la main, redémarrer.
+        """
+        if self._rr_cache is None:
+            self._rr_cache = load_rr()
+        return self._rr_cache
+
+    def _save_rr_config(self, data: dict) -> None:
+        """Écrit sur disque puis rafraîchit le cache."""
+        save_rr(data)
+        self._rr_cache = data
 
     # --- RECHERCHE DU MESSAGE ---
 
@@ -177,7 +194,7 @@ class ReactionRole(commands.Cog):
         """Donne le rôle quand un membre ajoute la réaction configurée."""
         if payload.user_id == self.bot.user.id:
             return
-        entry = load_rr().get(str(payload.message_id))
+        entry = self._get_rr_config().get(str(payload.message_id))
         if not entry:
             return
         role_id = entry.get("pairs", {}).get(reaction_key_from_partial(payload.emoji))
@@ -202,7 +219,7 @@ class ReactionRole(commands.Cog):
         """Retire le rôle quand un membre enlève la réaction configurée."""
         if payload.user_id == self.bot.user.id:
             return
-        entry = load_rr().get(str(payload.message_id))
+        entry = self._get_rr_config().get(str(payload.message_id))
         if not entry:
             return
         role_id = entry.get("pairs", {}).get(reaction_key_from_partial(payload.emoji))
@@ -261,7 +278,7 @@ class ReactionRole(commands.Cog):
 
         # Sauvegarde de la config
         async with _rr_lock:
-            data = load_rr()
+            data = self._get_rr_config()
             entry = data.setdefault(str(message.id), {
                 "guild_id": ctx.guild.id,
                 "channel_id": message.channel.id,
@@ -269,7 +286,7 @@ class ReactionRole(commands.Cog):
             })
             for key, _fmt, role in bindings:
                 entry["pairs"][key] = str(role.id)
-            save_rr(data)
+            self._save_rr_config(data)
 
         # Le bot ajoute les réactions sur le message
         for _key, react_fmt, _role in bindings:
@@ -300,7 +317,7 @@ class ReactionRole(commands.Cog):
         self.log_command_use(ctx, "reactionrole remove")
 
         async with _rr_lock:
-            data = load_rr()
+            data = self._get_rr_config()
             entry = data.get(str(message_id))
             if not entry or not entry.get("pairs"):
                 await send_auto_delete(ctx, TEXTS["rr_err_no_config"], ephemeral=True)
@@ -328,7 +345,7 @@ class ReactionRole(commands.Cog):
 
             if not entry["pairs"]:
                 data.pop(str(message_id), None)
-            save_rr(data)
+            self._save_rr_config(data)
 
         # Retirer les réactions du bot sur le message (best-effort)
         message = await self._find_message(ctx.guild, ctx.channel, int(message_id))
@@ -361,13 +378,13 @@ class ReactionRole(commands.Cog):
         self.log_command_use(ctx, "reactionrole removeall")
 
         async with _rr_lock:
-            data = load_rr()
+            data = self._get_rr_config()
             entry = data.pop(str(message_id), None)
             if not entry:
                 await send_auto_delete(ctx, TEXTS["rr_err_no_config"], ephemeral=True)
                 return
             count = len(entry.get("pairs", {}))
-            save_rr(data)
+            self._save_rr_config(data)
 
         # Retirer toutes les réactions du bot (best-effort, émojis animés inclus)
         message = await self._find_message(ctx.guild, ctx.channel, int(message_id))

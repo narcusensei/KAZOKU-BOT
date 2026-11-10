@@ -131,8 +131,11 @@ KAZOKU-BOT/
 │   ├── base.py          # Commandes générales
 │   ├── moderation.py    # Sanctions + historique
 │   ├── logs.py          # Journalisation complète
+│   ├── logs_helpers.py  # Helpers purs du cog logs
 │   ├── giveaway.py      # Système de giveaways
-│   └── reminder.py      # Rappels automatiques
+│   ├── reminder.py      # Rappels automatiques
+│   └── reactionrole.py  # Rôles à réaction
+├── tests/               # Tests pytest (dev local)
 └── data/                # Données runtime (auto-généré, ignoré)
 ```
 

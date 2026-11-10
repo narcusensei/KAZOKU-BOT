@@ -15,7 +15,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Mettre à jour et redémarrer le bot
-        uses: appleboy/ssh-action@v1
+        # Épinglé par SHA (immuable, anti supply-chain) — correspond à v1.2.5.
+        # Mettre à jour volontairement, après revue des changements de l'action.
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
         with:
           host: ${{ secrets.ORACLE_HOST }}
           username: ubuntu

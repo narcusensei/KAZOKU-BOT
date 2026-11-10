@@ -63,7 +63,27 @@ async def add_sanction_data_async(user_id: int, sanction_type: str, reason: str,
 
 # --- VUES ---
 
-class SpecificSanctionView(discord.ui.View):
+class SanctionViewBase(discord.ui.View):
+    """Base des vues de gestion des sanctions.
+
+    Sécurité : l'accès est re-vérifié à CHAQUE clic — seuls les membres ayant
+    la permission 'sanctionliste' (Owner/Admin/Modo) peuvent supprimer des
+    sanctions, même si le message porteur est visible par tous.
+    """
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        cog = interaction.client.get_cog('Moderation')
+        guild = interaction.guild
+        member = interaction.user if isinstance(interaction.user, discord.Member) else None
+        if member is None and guild is not None:
+            member = guild.get_member(interaction.user.id)
+        if cog and cog.member_has_permission(guild, member, "sanctionliste"):
+            return True
+        await interaction.response.send_message(TEXTS["permission_denied"], ephemeral=True)
+        return False
+
+
+class SpecificSanctionView(SanctionViewBase):
     """Vue pour sélectionner et supprimer une sanction spécifique."""
 
     def __init__(self, user_id: str):
@@ -107,7 +127,7 @@ class SpecificSanctionView(discord.ui.View):
             asyncio.create_task(mod_cog._log_sanction_deleted(interaction, uid, sanction=removed))
 
 
-class MainSanctionView(discord.ui.View):
+class MainSanctionView(SanctionViewBase):
     """Vue principale de gestion des sanctions."""
 
     def __init__(self, user_id: str):
@@ -199,10 +219,15 @@ def load_warnings_data() -> Dict[str, Any]:
 
 
 def save_warnings_data(data: Dict[str, Any]) -> None:
-    """Sauvegarde les données des avertissements dans le fichier JSON."""
+    """Sauvegarde atomique des avertissements (tmp + os.replace).
+
+    Une panne/crash en pleine écriture ne peut plus corrompre le registre.
+    """
     ensure_data_directory()
-    with open(WARNINGS_FILE, 'w', encoding='utf-8') as f:
+    tmp = WARNINGS_FILE + ".tmp"
+    with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
+    os.replace(tmp, WARNINGS_FILE)
 
 
 def add_sanction_data(user_id: int, sanction_type: str, reason: str, moderator: str, duration: str = "") -> int:
@@ -265,19 +290,30 @@ class Moderation(commands.Cog):
                 pass
         return member
 
-    async def check_permission(self, ctx: commands.Context, command_name: str) -> bool:
-        """Vérifie si l'utilisateur a la permission d'exécuter une commande."""
-        user = ctx.author
-        if user.id == ctx.guild.owner_id:
+    def member_has_permission(self, guild: Optional[discord.Guild], member: Optional[discord.Member], command_name: str) -> bool:
+        """Vérifie les permissions d'un membre déjà résolu (synchrone, pour les interactions).
+
+        PERMISSIONS ne contient que des IDs de rôles (ROLE_ADMIN/ROLE_MODO/ROLE_HELPER)
+        — un rôle ne peut plus être autorisé par son nom (impossible à imiter/renommer).
+        Fail-closed : guilde ou membre introuvable → refus.
+        """
+        if guild is None or member is None:
+            return False
+        if member.id == guild.owner_id:
             return True
 
-        author_member = await self.get_member(ctx.guild, user.id)
-        if not author_member:
-            return False
-
         allowed_roles = PERMISSIONS.get(command_name, [])
-        user_roles_names = [role.name for role in author_member.roles]
-        return any(role in allowed_roles for role in user_roles_names)
+        return any(role.id in allowed_roles for role in member.roles)
+
+    async def check_permission(self, ctx: commands.Context, command_name: str) -> bool:
+        """Vérifie si l'auteur de la commande a la permission (résout le membre si hors cache)."""
+        if ctx.guild is None:
+            return False
+        if ctx.author.id == ctx.guild.owner_id:
+            return True
+
+        author_member = await self.get_member(ctx.guild, ctx.author.id)
+        return self.member_has_permission(ctx.guild, author_member, command_name)
 
     async def check_sanction_possible(self, ctx: commands.Context, target: discord.abc.User, command_name: str) -> Tuple[bool, Optional[str]]:
         """Vérifie si une sanction est possible (permissions + hiérarchie)."""
@@ -948,7 +984,9 @@ class Moderation(commands.Cog):
             embed.description = f"{TEXTS['sanctionlist_empty']} {UNICODE_EMOJIS['party']}"
 
         view = MainSanctionView(str(user.id))
-        await send_auto_delete(ctx,embed=embed, view=view)
+        # Éphémère (slash) / auto-supprimé 15s (préfixe) : le registre et ses
+        # boutons de suppression ne restent pas visibles du channel entier.
+        await send_auto_delete(ctx, embed=embed, view=view, ephemeral=True)
 
 
 async def setup(bot):

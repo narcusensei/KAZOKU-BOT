@@ -1,0 +1,6 @@
+# Outils de dev (locaux uniquement — jamais installés sur la VM de prod)
+# Installation : pip install -r requirements.txt -r requirements-dev.txt
+
+ruff>=0.8
+pytest>=8
+tzdata>=2024.1  # base de fuseaux horaires pour zoneinfo SOUS WINDOWS (la VM Linux a celle du système)

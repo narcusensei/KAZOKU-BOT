@@ -21,6 +21,7 @@ from cogs.base import send_auto_delete
 MAX_PRIZE_LENGTH = 100        # limite du titre (embed title max 256, on borne large)
 MAX_WINNERS = 25              # limite raisonnable de gagnants
 ENDED_RETENTION_DAYS = 7      # purge des giveaways terminés après 7 jours
+DISPLAY_DEBOUNCE = 2          # secondes sans clic avant de rafraîchir l'affichage
 NO_MENTIONS = discord.AllowedMentions.none()  # annonces : jamais de ping @everyone via prize/desc
 
 # --- PARSING DU TEMPS ---
@@ -198,6 +199,7 @@ class Giveaway(commands.Cog):
         self.bot = bot
         self._view_registered = False
         self._end_tasks = {}  # gid -> tâche de fin programmée (précise à la seconde)
+        self._display_tasks = {}  # gid -> tâche de refresh d'affichage (debounce)
         self.check_expired_giveaways.start()
 
     def cog_unload(self):
@@ -205,6 +207,9 @@ class Giveaway(commands.Cog):
         for task in self._end_tasks.values():
             task.cancel()
         self._end_tasks.clear()
+        for task in self._display_tasks.values():
+            task.cancel()
+        self._display_tasks.clear()
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -263,6 +268,33 @@ class Giveaway(commands.Cog):
         task = self._end_tasks.pop(str(gid), None)
         if task:
             task.cancel()
+
+    def _schedule_display_refresh(self, gid: str):
+        """Programme le rafraîchissement de l'affichage avec un debounce.
+
+        Une ruée de clics sur « Participer » ne déclenche qu'UNE édition du
+        message public (et du log) 2s après le dernier clic, au lieu d'une
+        édition par clic — évite les rate-limits sur les gros giveaways.
+        """
+        old = self._display_tasks.pop(gid, None)
+        if old:
+            old.cancel()
+
+        async def _refresh():
+            try:
+                await asyncio.sleep(DISPLAY_DEBOUNCE)
+                self._display_tasks.pop(gid, None)
+                # Recharger depuis le disque : compteur de participations à jour
+                data = load_giveaways()
+                g = data["giveaways"].get(str(gid))
+                if g and g.get("status") == "active":
+                    await self._update_giveaway_display(g)
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                print(f"❌ Refresh affichage giveaway #{gid}: {e}")
+
+        self._display_tasks[gid] = asyncio.create_task(_refresh())
 
     # --- HELPERS DONNÉES ---
 
@@ -539,8 +571,8 @@ class Giveaway(commands.Cog):
             reply = TEXTS["giveaway_leave_ok"].format(prize=g["prize"])
         await interaction.response.send_message(reply, ephemeral=True)
 
-        # Mise à jour des affichages (non bloquante pour l'utilisateur)
-        await self._update_giveaway_display(g)
+        # Mise à jour des affichages en debounce (non bloquante, 1 édition par salve de clics)
+        self._schedule_display_refresh(gid)
 
     # --- TÂCHE DE FOND : FIN AUTOMATIQUE + PURGE ---
 

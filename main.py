@@ -7,7 +7,7 @@ from typing import List
 from dotenv import load_dotenv
 import discord
 from discord.ext import commands
-from settings import BOT_PREFIX, BOT_ACTIVITY_TYPE, BOT_ACTIVITY_NAME, TOKEN_ENV_VAR
+from settings import BOT_PREFIX, BOT_ACTIVITY_TYPE, BOT_ACTIVITY_NAME, TOKEN_ENV_VAR, GUILD_ID
 
 # --- ROBUSTESSE HTTP (crucial sur la VM Oracle) ---
 # discord.py réutilise les connexions TCP de son pool (keep-alive). Quand Discord
@@ -66,6 +66,13 @@ def create_bot() -> commands.Bot:
     intents = configure_intents()
     bot = commands.Bot(command_prefix=BOT_PREFIX, intents=intents)
 
+    # Barrière globale : toute commande utilisée hors du serveur autorisé
+    # (GUILD_ID) est refusée — même si le bot est ajouté ailleurs. Les DM restent
+    # autorisés (aucune commande de modération n'y fonctionne de toute façon).
+    @bot.check
+    async def require_main_guild(ctx: commands.Context) -> bool:
+        return ctx.guild is None or ctx.guild.id == GUILD_ID
+
     # Attacher l'événement on_ready
     @bot.event
     async def on_ready():
@@ -81,7 +88,10 @@ def create_bot() -> commands.Bot:
             return  # Ignorer les commandes inconnues (évite le spam)
 
         message = None
-        if isinstance(error, commands.MissingRequiredArgument):
+        if isinstance(error, commands.CheckFailure):
+            # Refus d'un check global (guilde non autorisée) ou de permission
+            message = "❌ Commande indisponible ici (serveur non autorisé ou permission manquante)."
+        elif isinstance(error, commands.MissingRequiredArgument):
             message = f"❌ Argument manquant : `{error.param.name}`"
         elif isinstance(error, commands.BadArgument):
             message = "❌ Argument invalide. Vérifie le format (mention, nombre...)."

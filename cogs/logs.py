@@ -5,7 +5,6 @@ import discord
 import aiohttp
 from discord.ext import commands
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
 import json
 import os
 import asyncio
@@ -13,368 +12,35 @@ import sys
 import io
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from settings import (
-    CUSTOM_EMOJIS, TEXTS,
+    CUSTOM_EMOJIS, TEXTS, GUILD_ID,
     LOG_CHANNELS, SANCTION_COLORS, VOICE_COLORS, STAGE_COLORS,
     MEMBER_COLORS, MESSAGE_COLORS, THREAD_COLORS, INVITE_COLORS,
     EMOJI_COLORS, SOUNDBOARD_COLORS, STICKER_COLORS, EVENT_COLORS,
     SERVER_COLORS, CHANNEL_COLORS, WEBHOOK_COLORS, ROLE_COLORS, DEFAULT_COLOR,
-    AUDIT_LOG_LIMIT, CONTENT_MAX_LENGTH, MEMBERS_FILE, DATA_DIR, truncate_text,
+    AUDIT_LOG_LIMIT, MEMBERS_FILE, DATA_DIR, truncate_text,
     AUDIT_LOG_DELAY_SHORT, AUDIT_LOG_DELAY_DEFAULT, AUDIT_LOG_DELAY_LONG, AUDIT_LOG_DELAY_SLOW,
     AUDIT_LOG_CALL_TIMEOUT,
-    LOG_TYPE_IDS, PERMISSION_LABELS_FR, DANGEROUS_PERMISSIONS,
+    PERMISSION_LABELS_FR, DANGEROUS_PERMISSIONS,
     MAX_ATTACHMENT_CACHE_SIZE, ATTACHMENT_CACHE_TTL, MAX_ATTACHMENT_FILE_SIZE,
+    ATTACHMENT_CACHE_MAX_BYTES,
     GIVEAWAY_COLOR
 )
+from cogs.logs_helpers import (
+    STAGE_EMOJIS, EVENT_EMOJIS, SANCTION_EMOJIS_MAP, VOICE_EMOJIS_MAP,
+    VERIFICATION_LEVEL_NAMES, create_fake_user, format_slowmode, format_archive,
+    get_timestamp, format_invite_duration, truncate_content, get_voice_state_status,
+    get_channel_type, get_channel_log_title,
+    get_event_location_str, _log_id_for, _color_name_fr,
+    SANCTION_LOG_TYPES, VOICE_LOG_TYPES, STAGE_LOG_TYPES, _PERMISSION_EXCLUDED,
+)
 
-# --- CONSTANTES LOCALES (non configurables) ---
-TZ_PARIS = ZoneInfo("Europe/Paris")
+# (Constantes, mappings et fonctions utilitaires purs → cogs/logs_helpers.py)
 
-STAGE_EMOJIS = {
-    "created": CUSTOM_EMOJIS["stage_created"],
-    "edited": CUSTOM_EMOJIS["stage_edited"],
-    "deleted": CUSTOM_EMOJIS["stage_deleted"]
-}
+# Verrou protégeant members.json contre les read-modify-write concurrents
+# (arrivées simultanées de plusieurs membres)
+_members_lock = asyncio.Lock()
 
-EVENT_EMOJIS = {
-    "created": CUSTOM_EMOJIS["event_created"],
-    "edited":  CUSTOM_EMOJIS["event_edited"],
-    "deleted": CUSTOM_EMOJIS["event_deleted"]
-}
-
-# Mapping des emojis personnalisés pour les sanctions
-SANCTION_EMOJIS_MAP = {
-    "Ban":           CUSTOM_EMOJIS["sanction_red"],
-    "Unban":         CUSTOM_EMOJIS["sanction_green"],
-    "Kick":          CUSTOM_EMOJIS["sanction_red"],
-    "Mute":          CUSTOM_EMOJIS["sanction_red"],
-    "Unmute":        CUSTOM_EMOJIS["sanction_green"],
-    "Avertissement": CUSTOM_EMOJIS["sanction_yellow"]
-}
-
-# Mapping des emojis personnalisés pour les événements vocaux
-VOICE_EMOJIS_MAP = {
-    "join":        CUSTOM_EMOJIS["voc_join"],
-    "leave":       CUSTOM_EMOJIS["voc_leave"],
-    "stream_start": CUSTOM_EMOJIS["stream_on"],
-    "stream_end":  CUSTOM_EMOJIS["stream_off"],
-    "mute":        CUSTOM_EMOJIS["mic_mute"],
-    "unmute":      CUSTOM_EMOJIS["mic_unmute"],
-    "deafen":      CUSTOM_EMOJIS["headphone_deactivated"],
-    "undeafen":    CUSTOM_EMOJIS["headphone_activated"],
-    "video":       CUSTOM_EMOJIS["cam_activated"],
-    "no_video":    CUSTOM_EMOJIS["cam_deactivated"],
-    "move":        CUSTOM_EMOJIS["stream_on"]
-}
-
-# Mapping des niveaux de vérification Discord
-VERIFICATION_LEVEL_NAMES = {
-    discord.VerificationLevel.none:    "Aucun",
-    discord.VerificationLevel.low:     "Faible",
-    discord.VerificationLevel.medium:  "Moyen",
-    discord.VerificationLevel.high:    "Élevé",
-    discord.VerificationLevel.highest: "Très élevé",
-}
-
-
-
-# --- FONCTIONS UTILITAIRES ---
-
-def create_fake_user(user_id: int, display_name: str = None):
-    """Crée un objet utilisateur factice quand l'utilisateur n'est pas disponible."""
-    if display_name is None:
-        display_name = TEXTS["unknown"]
-    return type('User', (), {
-        'mention': f"<@{user_id}>",
-        'display_name': display_name,
-        'global_name': display_name,
-        'display_avatar': type('obj', (object,), {'url': None}),
-        'id': user_id
-    })()
-
-
-def format_slowmode(seconds: int) -> str:
-    """Formate le délai du mode lent en texte."""
-    if seconds == 0:
-        return TEXTS["slowmode_disabled"]
-    if seconds < 60:
-        return f"{seconds}s"
-    minutes = seconds // 60
-    if minutes < 60:
-        return f"{minutes}m"
-    hours = minutes // 60
-    rem_min = minutes % 60
-    return f"{hours}h {rem_min}m" if rem_min else f"{hours}h"
-
-
-def format_archive(minutes: int) -> str:
-    """Formate la durée d'archivage en texte."""
-    archive_map = {
-        60: TEXTS["archive_1h"],
-        1440: TEXTS["archive_24h"],
-        4320: TEXTS["archive_3d"],
-        10080: TEXTS["archive_1w"]
-    }
-    return archive_map.get(minutes, f"{minutes} minutes")
-
-
-def get_timestamp() -> str:
-    """Retourne le timestamp formaté pour les footers."""
-    return datetime.now(TZ_PARIS).strftime('%d/%m/%Y %H:%M')
-
-
-def format_invite_duration(seconds: int) -> str:
-    """Formate une durée en texte lisible."""
-    if seconds <= 0:
-        return TEXTS["invite_never_expires"]
-    if seconds < 60:
-        return f"{seconds}s"
-    minutes = seconds // 60
-    if minutes < 60:
-        return f"{minutes}m"
-    hours = minutes // 60
-    rem_min = minutes % 60
-    if hours >= 24:
-        days = hours // 24
-        rem_hours = hours % 24
-        if rem_hours:
-            return f"{days}j {rem_hours}h"
-        return f"{days}j"
-    if rem_min:
-        return f"{hours}h {rem_min}m"
-    return f"{hours}h"
-
-
-def truncate_content(content: str, max_len: int = CONTENT_MAX_LENGTH) -> str:
-    """Tronque le contenu si nécessaire (alias de truncate_text)."""
-    return truncate_text(content, max_len)
-
-
-def get_voice_state_status(voice_state: discord.VoiceState) -> str:
-    """Génère une chaîne de caractères représentant l'état vocal d'un membre."""
-    if voice_state is None:
-        return ""
-
-    status_emojis = []
-
-    if voice_state.self_mute or voice_state.mute:
-        status_emojis.append(CUSTOM_EMOJIS["mic_mute"])
-    else:
-        status_emojis.append(CUSTOM_EMOJIS["mic_unmute"])
-
-    if voice_state.self_deaf or voice_state.deaf:
-        status_emojis.append(CUSTOM_EMOJIS["headphone_deactivated"])
-    else:
-        status_emojis.append(CUSTOM_EMOJIS["headphone_activated"])
-
-    if voice_state.self_video:
-        status_emojis.append(CUSTOM_EMOJIS["cam_activated"])
-    else:
-        status_emojis.append(CUSTOM_EMOJIS["cam_deactivated"])
-
-    if voice_state.self_stream:
-        status_emojis.append(CUSTOM_EMOJIS["stream_on"])
-
-    return " ".join(status_emojis)
-
-
-def get_channel_type(channel) -> str:
-    """Retourne le type de channel vocal."""
-    if isinstance(channel, discord.StageChannel):
-        return TEXTS["stage_channel_type"]
-    return TEXTS["voice_channel_type"]
-
-
-def get_channel_log_type_str(channel) -> str:
-    """Retourne le type de channel pour les logs création/édition (TEXTE/VOCAL/...)."""
-    if isinstance(channel, discord.CategoryChannel):
-        return TEXTS["channel_type_category"]
-    if isinstance(channel, discord.StageChannel):
-        return TEXTS["channel_type_stage"]
-    if isinstance(channel, discord.VoiceChannel):
-        return TEXTS["channel_type_voice"]
-    if isinstance(channel, discord.ForumChannel):
-        return TEXTS["channel_type_forum"]
-    if isinstance(channel, discord.TextChannel):
-        if channel.is_news():
-            return TEXTS["channel_type_news"]
-        return TEXTS["channel_type_text"]
-    return TEXTS["channel_type_unknown"]
-
-
-def get_channel_log_title(channel, action: str) -> str:
-    """Retourne le titre du log selon le type de channel et l'action.
-
-    Pour les catégories, on renvoie "CATÉGORIE CRÉÉE/MODIFIÉE/SUPPRIMÉE" (sans préfixe CHANNEL).
-    Pour les autres types : "CHANNEL {TYPE} CRÉÉ/MODIFIÉ/SUPPRIMÉ".
-    """
-    if isinstance(channel, discord.CategoryChannel):
-        category_titles = {
-            "created": TEXTS["category_created_title"],
-            "deleted": TEXTS["category_deleted_title"],
-            "edited": TEXTS["category_edited_title"],
-        }
-        return category_titles.get(action, TEXTS["category_edited_title"])
-    type_str = get_channel_log_type_str(channel)
-    if action == "created":
-        return TEXTS["channel_created_title"].format(type=type_str)
-    if action == "deleted":
-        return TEXTS["channel_deleted_title"].format(type=type_str)
-    return TEXTS["channel_edited_title"].format(type=type_str)
-
-
-def get_event_location_str(event):
-    """Retourne la localisation d'un événement sous forme de string."""
-    if event.channel:
-        return event.channel.mention
-    elif event.location:
-        return f"`{event.location}`"
-    return TEXTS["none"]
-
-
-# --- LOGID ---
-# Chaque type de log possède un ID fixe défini dans LOG_TYPE_IDS (settings.py).
-# L'ID identifie le TYPE de log (tous les "ban" = #L1), pas l'instance.
-# Pas de persistance nécessaire : le registre est statique et déterministe.
-
-def _log_id_for(log_type: str) -> str:
-    """Retourne le logID formaté pour un type de log donné (ex: 'ban' -> '#L1')."""
-    num = LOG_TYPE_IDS.get(log_type, 0)
-    return f"#L{num:03d}" if num else "#L000"
-
-
-def _rgb_to_hsv(r: int, g: int, b: int):
-    """Convertit RGB (0-255) vers HSV (H: 0-360, S: 0-1, V: 0-1)."""
-    r, g, b = r / 255, g / 255, b / 255
-    mx, mn = max(r, g, b), min(r, g, b)
-    d = mx - mn
-    v = mx
-    s = d / mx if mx > 0 else 0
-    if d == 0:
-        h = 0
-    elif mx == r:
-        h = ((g - b) / d) % 6
-    elif mx == g:
-        h = (b - r) / d + 2
-    else:
-        h = (r - g) / d + 4
-    return h * 60, s, v
-
-
-def _color_name_fr(color_value: int) -> str:
-    """Retourne le nom français d'une couleur à partir de sa valeur hex (0xRRGGBB).
-
-    Utilise la teinte HSV (perception humaine) pour identifier la couleur dominante.
-    Retourne 'Aucune' si value == 0 (couleur par défaut de Discord = gris).
-    """
-    if not color_value:
-        return TEXTS["none"]
-
-    r, g, b = (color_value >> 16) & 0xFF, (color_value >> 8) & 0xFF, color_value & 0xFF
-    h, s, v = _rgb_to_hsv(r, g, b)
-
-    # Cas spéciaux : couleurs peu saturées (gris/noir/blanc)
-    # Quand S est très bas, la teinte H n'a pas de sens → on ignore H
-    if s < 0.15:
-        if v < 0.15:
-            return "Noir"
-        if v > 0.9:
-            return "Blanc"
-        if v > 0.7:
-            return "Gris clair"
-        return "Gris"
-
-    # Rose pâle : faible saturation mais teinte rouge/rose (H n'est pertinent qu'avec S suffisant)
-    if s < 0.4 and (h < 20 or h >= 315) and v > 0.7:
-        return "Rose"
-
-    # Classification par teinte (HSV hue)
-    # Rouge : 0-15 et 345-360
-    if h < 15 or h >= 345:
-        return "Rouge"
-    # Rose : 315-345
-    if h >= 315:
-        return "Rose"
-    # Orange : 15-45
-    if h < 45:
-        return "Orange"
-    # Or : 45-55 (plus doré, légèrement désaturé)
-    if h < 55:
-        return "Or"
-    # Jaune : 55-70
-    if h < 70:
-        return "Jaune"
-    # Vert : 70-165
-    if h < 165:
-        return "Vert"
-    # Turquoise : 165-200
-    if h < 200:
-        return "Turquoise"
-    # Blurple : 225-245 (bleu Discord désaturé)
-    if 225 <= h < 245 and s < 0.75:
-        return "Blurple"
-    # Bleu : 200-265
-    if h < 265:
-        return "Bleu"
-    # Magenta : 265-315 avec valeur élevée
-    if h < 315 and v > 0.8:
-        return "Magenta"
-    # Violet : 265-315 avec valeur plus faible
-    return "Violet"
-
-
-# Mapping des action_type de sanction -> clé LOG_TYPE_IDS
-SANCTION_LOG_TYPES = {
-    "Ban":           "sanction_ban",
-    "Unban":         "sanction_unban",
-    "Kick":          "sanction_kick",
-    "Mute":          "sanction_mute",
-    "Unmute":        "sanction_unmute",
-    "Avertissement": "sanction_avert",
-}
-
-# Mapping des action_type vocaux -> clé LOG_TYPE_IDS (variante self/server via action_by)
-VOICE_LOG_TYPES = {
-    "join":         "voice_join",
-    "leave":        "voice_leave",
-    "stream_start": "voice_stream_start",
-    "stream_end":   "voice_stream_end",
-    "move":         "voice_move",
-    "video":        "voice_video_on",
-    "no_video":     "voice_video_off",
-}
-
-# Mapping des action_type stage -> clé LOG_TYPE_IDS
-STAGE_LOG_TYPES = {
-    "created":          "stage_created",
-    "deleted":          "stage_deleted",
-    "speaker_added":    "stage_speaker_added",
-    "speaker_invited":  "stage_speaker_invited",
-    "speaker_self":     "stage_speaker_self",
-    "speaker_removed":  "stage_speaker_removed",
-}
-
-
-# --- PERMISSIONS CANONIQUES (dédoublonnées) ---
-# discord.Permissions.VALID_FLAGS contient des alias partageant le même bit.
-# On garde le nom correspondant à l'interface Discord (un seul par bit réel).
-_PERMISSION_CANONICAL = {
-    "view_channel",             # alias read_messages exclu
-    "use_external_emojis",      # alias external_emojis exclu
-    "manage_roles",             # alias manage_permissions exclu
-    "manage_expressions",       # alias manage_emojis / manage_emojis_and_stickers exclus
-    "use_external_stickers",    # alias external_stickers exclu
-    "create_polls",             # alias send_polls exclu
-}
-# Noms de permissions de rôle à EXCLURE (alias redondants)
-_PERMISSION_EXCLUDED = {
-    "read_messages",
-    "external_emojis",
-    "manage_permissions",
-    "manage_emojis",
-    "manage_emojis_and_stickers",
-    "external_stickers",
-    "send_polls",
-}
+# (Noms de permissions alias à exclure → _PERMISSION_EXCLUDED dans cogs/logs_helpers.py)
 
 
 # --- CLASSE PRINCIPALE ---
@@ -396,6 +62,7 @@ class Logs(commands.Cog):
         self._booster_cache = {}  # Cache boost récent (guild_id -> member) pour on_guild_update
         self._attachment_cache = {}  # message_id -> [(filename, bytes, content_type)] sauvegarde proactive des fichiers
         self._attachment_cache_order = []  # FIFO pour limiter la taille du cache
+        self._audit_session = None  # Session REST dédiée aux audit logs (réutilisée)
 
         # Intercepter le gateway event VOICE_CHANNEL_STATUS_UPDATE (non supporté par discord.py)
         self.bot._connection.parsers['VOICE_CHANNEL_STATUS_UPDATE'] = lambda data: asyncio.ensure_future(
@@ -408,6 +75,8 @@ class Logs(commands.Cog):
         print("📦 Cog 'Logs' chargé.")
         # Pré-charger les bannières actuelles des serveurs
         for guild in self.bot.guilds:
+            if guild.id != GUILD_ID:
+                continue
             if guild.banner:
                 try:
                     self._banner_cache[guild.id] = await guild.banner.read()
@@ -429,8 +98,16 @@ class Logs(commands.Cog):
         channel = self.bot.get_channel(channel_id)
         return channel
 
+    def _attachment_cache_bytes(self) -> int:
+        """Poids total actuel du cache pièces jointes (octets)."""
+        return sum(
+            len(fbytes)
+            for data in self._attachment_cache.values()
+            for _fname, fbytes, _ctype in data['files']
+        )
+
     def _cache_attachment_cleanup(self):
-        """Nettoie le cache des pièces jointes (FIFO + TTL)."""
+        """Nettoie le cache des pièces jointes (TTL + FIFO + plafond octets)."""
         if not self._attachment_cache:
             return
         now = datetime.now(timezone.utc).timestamp()
@@ -440,8 +117,12 @@ class Logs(commands.Cog):
             self._attachment_cache.pop(mid, None)
             if mid in self._attachment_cache_order:
                 self._attachment_cache_order.remove(mid)
-        # Si toujours trop grand, supprimer les plus anciens (FIFO)
-        while len(self._attachment_cache) > MAX_ATTACHMENT_CACHE_SIZE and self._attachment_cache_order:
+        # Si toujours trop grand : évacuer les plus anciens (FIFO), en nombre de
+        # messages ET en octets (plafond mémoire ATTACHMENT_CACHE_MAX_BYTES)
+        while self._attachment_cache_order and (
+            len(self._attachment_cache) > MAX_ATTACHMENT_CACHE_SIZE
+            or self._attachment_cache_bytes() > ATTACHMENT_CACHE_MAX_BYTES
+        ):
             oldest = self._attachment_cache_order.pop(0)
             self._attachment_cache.pop(oldest, None)
 
@@ -449,9 +130,13 @@ class Logs(commands.Cog):
         """Sauvegarde proactivement les pièces jointes d'un message dans le cache.
 
         Permet de restaurer les fichiers après suppression (individuelle ou bulk).
-        Ignore les fichiers trop volumineux (> MAX_ATTACHMENT_FILE_SIZE).
+        Ignore les fichiers trop volumineux (> MAX_ATTACHMENT_FILE_SIZE) et les
+        messages dont les pièces jointes dépasseraient le plafond mémoire.
         """
         if not message.attachments:
+            return
+        # Ne rien télécharger si le message seul dépasserait le plafond mémoire
+        if sum(att.size or 0 for att in message.attachments) > ATTACHMENT_CACHE_MAX_BYTES:
             return
         files_data = []
         for att in message.attachments:
@@ -470,26 +155,45 @@ class Logs(commands.Cog):
             self._attachment_cache_order.append(message.id)
             self._cache_attachment_cleanup()
 
+    def _get_audit_session(self) -> aiohttp.ClientSession:
+        """Session REST dédiée aux audit logs, créée une fois et réutilisée.
+
+        Évite de recréer une session (contexte SSL notamment) à chaque appel.
+        Le connecteur garde force_close (une connexion neuve par requête) :
+        comportement éprouvé en production sur la VM Oracle — cf. CLAUDE.md
+        « Pièges rencontrés ». Ne PAS activer le keep-alive ici sans test VM.
+        """
+        if self._audit_session is None or self._audit_session.closed:
+            self._audit_session = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=AUDIT_LOG_CALL_TIMEOUT),
+                headers={'Authorization': 'Bot ' + self.bot.http.token},
+                connector=aiohttp.TCPConnector(force_close=True, enable_cleanup_closed=True),
+            )
+        return self._audit_session
+
+    async def cog_unload(self):
+        """Ferme la session REST des audit logs."""
+        if self._audit_session and not self._audit_session.closed:
+            await self._audit_session.close()
+
     async def _get_moderator_from_audit_log(self, guild, target_id, action_types, time_window: int = 120, limit: int = AUDIT_LOG_LIMIT):
         """Recherche un modérateur dans les audit logs (REST direct).
 
         Contournement : le client HTTP interne de discord.py peut bloquer
         indéfiniment sur ce bucket (2e appel) alors que tout le reste marche —
-        voir CLAUDE.md « Pièges rencontrés ». Appel REST autonome avec timeout
-        dur, éprouvé fiable depuis la VM.
+        voir CLAUDE.md « Pièges rencontrés ». Appel REST sur une session
+        dédiée avec timeout dur, éprouvé fiable depuis la VM.
         """
         try:
-            timeout = aiohttp.ClientTimeout(total=10)
-            headers = {'Authorization': 'Bot ' + self.bot.http.token}
+            session = self._get_audit_session()
             params = {'limit': min(limit, 100)}
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(
-                    f'https://discord.com/api/v10/guilds/{guild.id}/audit-logs',
-                    headers=headers, params=params
-                ) as resp:
-                    if resp.status != 200:
-                        return None
-                    data = await resp.json()
+            async with session.get(
+                f'https://discord.com/api/v10/guilds/{guild.id}/audit-logs',
+                params=params
+            ) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.json()
         except (aiohttp.ClientError, asyncio.TimeoutError, Exception):
             return None
 
@@ -744,6 +448,8 @@ class Logs(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member):
+        if member.guild.id != GUILD_ID:
+            return
         channel = self._get_log_channel("member")
         if not channel:
             return
@@ -762,32 +468,33 @@ class Logs(commands.Cog):
             await channel.send(embed=embed)
             return
 
-        # Gestion des membres
+        # Gestion des membres (lock + écriture atomique : joins simultanés sans perte)
         members_file = MEMBERS_FILE
-        members_data = {}
         is_rejoin = False
 
-        try:
-            if os.path.exists(members_file):
-                with open(members_file, 'r', encoding='utf-8') as f:
-                    members_data = json.load(f)
-            else:
-                os.makedirs(DATA_DIR, exist_ok=True)
-                with open(members_file, 'w', encoding='utf-8') as f:
-                    json.dump({}, f)
+        async with _members_lock:
+            try:
+                members_data = {}
+                if os.path.exists(members_file):
+                    with open(members_file, 'r', encoding='utf-8') as f:
+                        members_data = json.load(f)
+                else:
+                    os.makedirs(DATA_DIR, exist_ok=True)
 
-            uid = str(member.id)
-            if uid in members_data:
-                is_rejoin = True
-            members_data[uid] = {
-                "name": member.name,
-                "last_join": datetime.now(timezone.utc).isoformat()
-            }
-            with open(members_file, 'w', encoding='utf-8') as f:
-                json.dump(members_data, f, indent=4, ensure_ascii=False)
-        except (IOError, ValueError):
-            # UnicodeEncodeError (pseudos non-cp1252) hérite de ValueError
-            pass
+                uid = str(member.id)
+                if uid in members_data:
+                    is_rejoin = True
+                members_data[uid] = {
+                    "name": member.name,
+                    "last_join": datetime.now(timezone.utc).isoformat()
+                }
+                tmp = members_file + ".tmp"
+                with open(tmp, 'w', encoding='utf-8') as f:
+                    json.dump(members_data, f, indent=4, ensure_ascii=False)
+                os.replace(tmp, members_file)
+            except (IOError, ValueError):
+                # UnicodeEncodeError (pseudos non-cp1252) hérite de ValueError
+                pass
 
         embed = discord.Embed(color=MEMBER_COLORS["join"])
         embed.set_author(name=f"{member.global_name or member.name}", icon_url=member.display_avatar.url)
@@ -811,6 +518,8 @@ class Logs(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_remove(self, member):
+        if member.guild.id != GUILD_ID:
+            return
         channel = self._get_log_channel("member")
         if not channel:
             return
@@ -876,6 +585,8 @@ class Logs(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_update(self, before, after):
+        if after.guild.id != GUILD_ID:
+            return
         channel = self._get_log_channel("member")
         if not channel:
             return
@@ -984,7 +695,7 @@ class Logs(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        if not message.guild or message.author.bot:
+        if not message.guild or message.guild.id != GUILD_ID or message.author.bot:
             return
 
         if message.poll:
@@ -1001,6 +712,8 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_bulk_message_delete(self, messages):
         """Se déclenche lors d'un /clear (purge) ou d'un ban avec suppression de messages."""
+        if not messages or not messages[0].guild or messages[0].guild.id != GUILD_ID:
+            return
         channel = self._get_log_channel("message")
         file_channel = self._get_log_channel("file")
 
@@ -1071,7 +784,7 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_message_delete(self, message):
         """Se déclenche lors d'une suppression manuelle."""
-        if not message.guild:
+        if not message.guild or message.guild.id != GUILD_ID:
             return
         channel = self._get_log_channel("message")
         if not channel:
@@ -1234,7 +947,7 @@ class Logs(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message_edit(self, before, after):
-        if not after.guild or after.author.bot:
+        if not after.guild or after.guild.id != GUILD_ID or after.author.bot:
             return
 
         channel = self._get_log_channel("message")
@@ -1303,7 +1016,7 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_raw_reaction_remove(self, payload):
         """Se déclenche quand une réaction est retirée."""
-        if not payload.guild_id:
+        if not payload.guild_id or payload.guild_id != GUILD_ID:
             return
 
         guild = self.bot.get_guild(payload.guild_id)
@@ -1351,6 +1064,8 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_update(self, before, after):
         """Se déclenche quand les paramètres du serveur sont modifiés."""
+        if after.id != GUILD_ID:
+            return
         channel = self._get_log_channel("server")
         if not channel:
             return
@@ -1636,7 +1351,7 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_thread_create(self, thread):
         """Se déclenche lors de la création d'un fil."""
-        if not thread.guild:
+        if not thread.guild or thread.guild.id != GUILD_ID:
             return
 
         channel = self._get_log_channel("message")
@@ -1671,7 +1386,7 @@ class Logs(commands.Cog):
         est rouvert : le fil ayant été retiré du cache à l'archivage, sa réouverture est
         vue comme un "join". On détecte ce cas via l'âge du fil (récent = vrai join, ancien = réouverture).
         """
-        if not thread.guild:
+        if not thread.guild or thread.guild.id != GUILD_ID:
             return
 
         channel = self._get_log_channel("message")
@@ -1705,7 +1420,7 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_thread_delete(self, thread):
         """Se déclenche lors de la suppression d'un fil."""
-        if not thread.guild:
+        if not thread.guild or thread.guild.id != GUILD_ID:
             return
 
         await asyncio.sleep(AUDIT_LOG_DELAY_DEFAULT)
@@ -1741,7 +1456,7 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_thread_update(self, before, after):
         """Se déclenche lors de la modification d'un fil."""
-        if not after.guild:
+        if not after.guild or after.guild.id != GUILD_ID:
             return
 
         channel = self._get_log_channel("message")
@@ -1847,7 +1562,7 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_channel_create(self, channel):
         """Se déclenche quand un channel est créé."""
-        if not channel.guild:
+        if not channel.guild or channel.guild.id != GUILD_ID:
             return
 
         log_channel = self._get_log_channel("channel")
@@ -1883,7 +1598,7 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel):
         """Se déclenche quand un channel est supprimé."""
-        if not channel.guild:
+        if not channel.guild or channel.guild.id != GUILD_ID:
             return
 
         log_channel = self._get_log_channel("channel")
@@ -1919,7 +1634,7 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_channel_update(self, before, after):
         """Se déclenche quand un channel est modifié (propriétés et/ou permissions)."""
-        if not after.guild:
+        if not after.guild or after.guild.id != GUILD_ID:
             return
 
         log_channel = self._get_log_channel("channel")
@@ -2187,7 +1902,7 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_role_create(self, role):
         """Se déclenche quand un rôle est créé."""
-        if not role.guild:
+        if not role.guild or role.guild.id != GUILD_ID:
             return
 
         log_channel = self._get_log_channel("roles")
@@ -2212,7 +1927,7 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_role_delete(self, role):
         """Se déclenche quand un rôle est supprimé."""
-        if not role.guild:
+        if not role.guild or role.guild.id != GUILD_ID:
             return
 
         log_channel = self._get_log_channel("roles")
@@ -2237,7 +1952,7 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_role_update(self, before, after):
         """Se déclenche quand un rôle est modifié."""
-        if not after.guild:
+        if not after.guild or after.guild.id != GUILD_ID:
             return
 
         log_channel = self._get_log_channel("roles")
@@ -2393,7 +2108,7 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_invite_create(self, invite):
         """Se déclenche quand une invitation est créée."""
-        if not invite.guild:
+        if not invite.guild or invite.guild.id != GUILD_ID:
             return
 
         channel = self._get_log_channel("action")
@@ -2437,7 +2152,7 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_invite_delete(self, invite):
         """Se déclenche quand une invitation est supprimée."""
-        if not invite.guild:
+        if not invite.guild or invite.guild.id != GUILD_ID:
             return
 
         channel = self._get_log_channel("action")
@@ -2499,7 +2214,7 @@ class Logs(commands.Cog):
         L'événement gateway WEBHOOKS_UPDATE ne fournit que guild_id + channel_id.
         On croise avec l'audit log pour déterminer l'action et le webhook ciblé.
         """
-        if not channel.guild:
+        if not channel.guild or channel.guild.id != GUILD_ID:
             return
 
         log_channel = self._get_log_channel("channel")
@@ -2669,6 +2384,8 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_emojis_update(self, guild, before, after):
         """Se déclenche quand des emojis sont ajoutés ou supprimés."""
+        if guild.id != GUILD_ID:
+            return
         channel = self._get_log_channel("action")
         if not channel:
             return
@@ -2687,7 +2404,7 @@ class Logs(commands.Cog):
                 embed.set_author(name=mod_name, icon_url=mod_avatar)
                 embed.title = f'{CUSTOM_EMOJIS["emoji_added"]} **{TEXTS["emoji_added_title"]}**'
                 embed.description = f'{str(emoji)} a été créé par {mod_mention}'
-   
+
                 embed.set_thumbnail(url=emoji.url)
                 embed.add_field(name=TEXTS["emoji_name_field"], value=f"`{emoji.name}`", inline=False)
 
@@ -2710,7 +2427,7 @@ class Logs(commands.Cog):
                 embed.title = f'{CUSTOM_EMOJIS["emoji_removed"]} **{TEXTS["emoji_removed_title"]}**'
                 embed.description = f'`{emoji.name}` a été supprimé par {mod_mention}'
 
- 
+
 
                 if moderator:
                     embed.set_footer(text=self._footer("emoji_removed", moderator.id))
@@ -2736,7 +2453,7 @@ class Logs(commands.Cog):
                 embed.set_author(name=mod_name, icon_url=mod_avatar)
                 embed.title = f'{CUSTOM_EMOJIS["emoji_edited"]} **{TEXTS["emoji_edited_title"]}**'
                 embed.description = f'{str(after_emoji)} à été modifié par {mod_mention}\n\n**{TEXTS["new_name"]}**\n`{after_emoji.name}`'
-   
+
                 embed.set_thumbnail(url=after_emoji.url)
 
                 if moderator:
@@ -2751,6 +2468,8 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_stickers_update(self, guild, before, after):
         """Se déclenche quand des stickers sont ajoutés, supprimés ou modifiés."""
+        if guild.id != GUILD_ID:
+            return
         channel = self._get_log_channel("action")
         if not channel:
             return
@@ -2770,7 +2489,7 @@ class Logs(commands.Cog):
                 embed.set_author(name=mod_name, icon_url=mod_avatar)
                 embed.title = f'{CUSTOM_EMOJIS["sticker_created"]} **{TEXTS["sticker_created_title"]}**'
                 embed.description = f'Le sticker `{sticker.name}` a été créé par {mod_mention}'
-   
+
                 embed.add_field(name=TEXTS["sticker_emoji_id_field"], value=f"`{sticker.emoji}`", inline=False)
                 if sticker.description:
                     embed.add_field(name=TEXTS["sticker_description_field"], value=sticker.description, inline=False)
@@ -2795,7 +2514,7 @@ class Logs(commands.Cog):
                 embed.set_author(name=mod_name, icon_url=mod_avatar)
                 embed.title = f'{CUSTOM_EMOJIS["sticker_deleted"]} **{TEXTS["sticker_deleted_title"]}**'
                 embed.description = f'Le sticker `{sticker.name}` a été supprimé par {mod_mention}'
-  
+
                 embed.add_field(name=TEXTS["sticker_emoji_id_field"], value=f"`{sticker.emoji}`", inline=False)
 
                 if moderator:
@@ -2848,6 +2567,8 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_soundboard_sound_create(self, sound):
         """Se déclenche quand un son soundboard est ajouté."""
+        if not sound.guild or sound.guild.id != GUILD_ID:
+            return
         channel = self._get_log_channel("action")
         if not channel:
             return
@@ -2862,7 +2583,7 @@ class Logs(commands.Cog):
         embed.title = f'{CUSTOM_EMOJIS["soundboard_added"]} **{TEXTS["soundboard_added_title"]}**'
         embed.description = f'La soundboard `{sound.name}` a été ajouté par {mod_mention}'
 
- 
+
 
         if moderator:
             embed.set_footer(text=self._footer("soundboard_added", moderator.id))
@@ -2874,6 +2595,8 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_soundboard_sound_delete(self, sound):
         """Se déclenche quand un son soundboard est supprimé."""
+        if not sound.guild or sound.guild.id != GUILD_ID:
+            return
         channel = self._get_log_channel("action")
         if not channel:
             return
@@ -2888,7 +2611,7 @@ class Logs(commands.Cog):
         embed.title = f'{CUSTOM_EMOJIS["soundboard_removed"]} **{TEXTS["soundboard_removed_title"]}**'
         embed.description = f'La soundboard `{sound.name}` a été retiré par {mod_mention}'
 
- 
+
 
         if moderator:
             embed.set_footer(text=self._footer("soundboard_removed", moderator.id))
@@ -2900,6 +2623,8 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_soundboard_sound_update(self, before, after):
         """Se déclenche quand un son soundboard est modifié."""
+        if not after.guild or after.guild.id != GUILD_ID:
+            return
         channel = self._get_log_channel("action")
         if not channel:
             return
@@ -2959,13 +2684,13 @@ class Logs(commands.Cog):
         elif action_type == "speaker_added":
             embed.title = f"{emoji} **{TEXTS['stage_speaker_added_title']}**"
             embed.description = f"{invited_member.mention} à accepté de devenir intervenant dans {stage_channel.mention}"
- 
+
             embed.set_footer(text=self._footer(STAGE_LOG_TYPES[action_type], invited_member.id))
 
         elif action_type == "speaker_invited":
             embed.title = f"{emoji} **{TEXTS['stage_speaker_invited_title']}**"
             embed.description = f"{invited_member.mention} à été invité à devenir intervenant dans {stage_channel.mention}"
-    
+
             embed.set_footer(text=self._footer(STAGE_LOG_TYPES[action_type], invited_member.id))
 
         elif action_type == "speaker_self":
@@ -2991,6 +2716,8 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_stage_instance_create(self, stage_instance):
         """Se déclenche lors de la création d'une instance de scène (conférence lancée)."""
+        if not stage_instance.guild or stage_instance.guild.id != GUILD_ID:
+            return
         channel = self._get_log_channel("stage")
         if not channel:
             return
@@ -3013,6 +2740,8 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_stage_instance_delete(self, stage_instance):
         """Se déclenche lors de la suppression d'une instance de scène (conférence finie)."""
+        if not stage_instance.guild or stage_instance.guild.id != GUILD_ID:
+            return
         log_channel = self._get_log_channel("stage")
         if not log_channel:
             return
@@ -3098,6 +2827,8 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
         """Se déclenche lors d'un changement d'état vocal."""
+        if member.guild.id != GUILD_ID:
+            return
         log_channel = self._get_log_channel("voice")
         if not log_channel:
             return
@@ -3341,6 +3072,8 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_audit_log_entry_create(self, entry):
         """Cache en temps réel les entries member_move et member_disconnect."""
+        if not entry.guild or entry.guild.id != GUILD_ID:
+            return
         if not entry.user:
             return
 
@@ -3411,7 +3144,7 @@ class Logs(commands.Cog):
         status = data.get('status') or None
 
         guild = self.bot.get_guild(guild_id)
-        if not guild:
+        if not guild or guild.id != GUILD_ID:
             return
 
         channel = guild.get_channel(channel_id)
@@ -3457,7 +3190,6 @@ class Logs(commands.Cog):
                 break
 
         if not mod_user_id:
-            return
             return
 
         # Résoudre l'utilisateur depuis user_id (cache bot puis API en fallback)
@@ -3512,7 +3244,7 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_scheduled_event_create(self, event):
         """Se déclenche quand un événement est créé."""
-        if not event.guild:
+        if not event.guild or event.guild.id != GUILD_ID:
             return
 
         channel = self._get_log_channel("action")
@@ -3541,7 +3273,7 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_scheduled_event_delete(self, event):
         """Se déclenche quand un événement est supprimé."""
-        if not event.guild:
+        if not event.guild or event.guild.id != GUILD_ID:
             return
 
         channel = self._get_log_channel("action")
@@ -3563,7 +3295,7 @@ class Logs(commands.Cog):
     @commands.Cog.listener()
     async def on_scheduled_event_update(self, before, after):
         """Se déclenche quand un événement est modifié."""
-        if not after.guild:
+        if not after.guild or after.guild.id != GUILD_ID:
             return
 
         channel = self._get_log_channel("action")

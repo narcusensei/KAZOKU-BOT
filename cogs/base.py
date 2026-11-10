@@ -328,6 +328,7 @@ class Base(commands.Cog):
             "**Profile User** - `/profil ou +profil [user]`\n"
             "**Info** - `/info ou +info`\n"
             "**Sync** - `/sync ou +sync`\n"
+            "**Role IDs** - `/roleids ou +roleids`\n"
             "**Embed** - `/embed ou +embed`\n"
             "━━━━━━━ 🔨 **MODÉRATION** ━━━━━━━\n"
             "**Supprimer Message** - `/clear ou +clear 50 [user]`\n"
@@ -435,6 +436,39 @@ class Base(commands.Cog):
         except (discord.Forbidden, discord.HTTPException) as e:
             print(f"{UNICODE_EMOJIS['cross']} Erreur Sync : {e}")
             await send_auto_delete(ctx,f"{UNICODE_EMOJIS['cross']} {TEXTS['sync_error']}")
+
+    @commands.hybrid_command(name="roleids", description="Liste les rôles et leurs IDs (Dev)")
+    async def roleids_slash(self, ctx: commands.Context):
+        """Affiche la liste nom → ID des rôles du serveur (réservé Owner/Admin).
+
+        Utile pour renseigner PERMISSIONS (settings.py) avec des IDs de rôles
+        plutôt que des noms (un ID ne peut être ni renommé ni imité).
+        """
+        # Check guild EN PREMIER (check_permission accède à guild.owner_id)
+        if ctx.guild is None:
+            await send_auto_delete(ctx, "❌ Cette commande doit être utilisée dans un serveur.", ephemeral=True)
+            return
+
+        # Vérification de permission (fail-closed : refuser si le cog Moderation est absent)
+        mod_cog = self.bot.get_cog('Moderation')
+        if not mod_cog or not await mod_cog.check_permission(ctx, "sync"):
+            await send_auto_delete(ctx, "❌ Commande réservée à l'Owner et aux Admins.", ephemeral=True)
+            return
+
+        # Log de l'utilisation de la commande (+roleids ou /roleids selon le mode)
+        logs_cog = self.bot.get_cog('Logs')
+        if logs_cog:
+            prefix = "+" if ctx.interaction is None else "/"
+            asyncio.create_task(logs_cog.log_command_use("roleids", ctx.author, prefix))
+
+        lines = [f"`{role.id}` — {role.name}" for role in reversed(ctx.guild.roles)]
+        embed = discord.Embed(
+            title=f'{CUSTOM_EMOJIS["info"]} **RÔLES & IDs**',
+            description=truncate_text("\n".join(lines), 3900),
+            color=discord.Color(int("B821FF", 16))  # Violet
+        )
+        embed.set_footer(text=self._footer("info", ctx.author.id))
+        await send_auto_delete(ctx, embed=embed, ephemeral=True)
 
     @commands.hybrid_command(name="embed", description="Créer un embed personnalisé (Create a custom embed)")
     async def embed_slash(self, ctx: commands.Context):

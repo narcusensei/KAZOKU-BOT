@@ -20,6 +20,10 @@ BOT_FOOTER = "𝘒4𝘡𝘖𝘒𝘜 © 2026"
 
 TOKEN_ENV_VAR = "DISCORD_TOKEN"
 
+# ID du serveur UNIQUE autorisé : toute commande ou événement venant d'une autre
+# guilde où le bot serait ajouté est ignoré (anti-fuite de logs / anti-abus).
+GUILD_ID = 1244705793585057873
+
 
 # ===================== CHANNEL IDS ===========================
 
@@ -1020,38 +1024,44 @@ DANGEROUS_PERMISSIONS = {
 
 
 # =============== PERMISSIONS =================================
-# Rôles autorisés par commande.
-# "+" = Owner/Admin, "~" = Modérateur, "-" = Helper
+# Rôles autorisés par commande — par ID de rôle uniquement.
+# Un ID ne peut être ni renommé ni imité, contrairement à un nom.
+# Rôles de référence du serveur K4ZOKU :
+#   "+" = Owner/Admin, "~" = Modérateur, "-" = Helper
+
+ROLE_ADMIN  = 1244709101615710249   # "+"
+ROLE_MODO   = 1252319664650981386   # "~"
+ROLE_HELPER = 1244739496751403008   # "-"
 
 PERMISSIONS = {
-    "kick":          ["+", "~"],
-    "ban":           ["+", "~"],
-    "mute":          ["+", "~", "-"],
-    "avert":         ["+", "~", "-"],
-    "clear":         ["+", "~", "-"],
-    "sanctionliste": ["+", "~"],
-    "unban":         ["+"],
-    "unmute":        ["+", "~"],
+    "kick":          [ROLE_ADMIN, ROLE_MODO],
+    "ban":           [ROLE_ADMIN, ROLE_MODO],
+    "mute":          [ROLE_ADMIN, ROLE_MODO, ROLE_HELPER],
+    "avert":         [ROLE_ADMIN, ROLE_MODO, ROLE_HELPER],
+    "clear":         [ROLE_ADMIN, ROLE_MODO, ROLE_HELPER],
+    "sanctionliste": [ROLE_ADMIN, ROLE_MODO],
+    "unban":         [ROLE_ADMIN],
+    "unmute":        [ROLE_ADMIN, ROLE_MODO],
 
     # Giveaway
-    "gcreate":       ["+", "~"],
-    "gstart":        ["+", "~"],
-    "gend":          ["+", "~"],
-    "gdelete":      ["+", "~"],
-    "greroll":       ["+", "~"],
+    "gcreate":       [ROLE_ADMIN, ROLE_MODO],
+    "gstart":        [ROLE_ADMIN, ROLE_MODO],
+    "gend":          [ROLE_ADMIN, ROLE_MODO],
+    "gdelete":      [ROLE_ADMIN, ROLE_MODO],
+    "greroll":       [ROLE_ADMIN, ROLE_MODO],
 
     # Dev
-    "sync":          ["+"],
+    "sync":          [ROLE_ADMIN],
 
     # Rappels
-    "reminder":      ["+", "~"],
-    "reminderlist":  ["+", "~"],
+    "reminder":      [ROLE_ADMIN, ROLE_MODO],
+    "reminderlist":  [ROLE_ADMIN, ROLE_MODO],
 
     # Outils
-    "embed":         ["+", "~"],
+    "embed":         [ROLE_ADMIN, ROLE_MODO],
 
     # Rôles à réaction
-    "reactionrole":  ["+", "~"]
+    "reactionrole":  [ROLE_ADMIN, ROLE_MODO]
 }
 
 SANCTION_TYPES = ["Ban", "Kick", "Mute", "Avertissement"]
@@ -1276,11 +1286,10 @@ MAX_SANCTIONS_DISPLAY = 10
 MAX_SANCTIONS_SELECT = 24
 
 # Logs
-AUDIT_LOG_TIMEOUT = 5
-
-# Timeout de l'appel HTTP audit_logs() : si Discord/réseau bloque, rendre la
-# main et logger sans info modérateur plutôt que de bloquer la log indéfiniment
-AUDIT_LOG_CALL_TIMEOUT = 15
+# Timeout dur de l'appel REST audit-logs (session dédiée réutilisée dans
+# cogs/logs.py) : si Discord/réseau bloque, on rend la main et on logge sans
+# info modérateur plutôt que de bloquer indéfiniment. 10s = éprouvé en prod.
+AUDIT_LOG_CALL_TIMEOUT = 10
 AUDIT_LOG_LIMIT = 100
 THREAD_REOPEN_THRESHOLD = 120  # secondes
 CONTENT_MAX_LENGTH = 1000  # < 1024 : laisse la marge pour les préfixes de formatage (">>> " etc.)
@@ -1288,10 +1297,14 @@ CONTENT_MAX_LENGTH = 1000  # < 1024 : laisse la marge pour les préfixes de form
 # Sauvegarde proactive des pièces jointes (pour les logs de suppression)
 # Le bot met en cache les fichiers des messages pour pouvoir les restaurer
 # après suppression (individuelle ou en masse type ban).
-# ATTENTION : consomme de la mémoire. MAX_ATTACHMENT_CACHE_SIZE borne le cache.
+# ATTENTION : consomme de la mémoire. Trois bornes cumulatives :
+#   MAX_ATTACHMENT_CACHE_SIZE    — nombre max de messages en cache
+#   ATTACHMENT_CACHE_MAX_BYTES   — plafond mémoire TOTAL (protège la VM de l'OOM)
+#   MAX_ATTACHMENT_FILE_SIZE     — taille max par fichier (au-delà : ignoré)
 MAX_ATTACHMENT_CACHE_SIZE = 500   # nombre maximum de messages mis en cache
 ATTACHMENT_CACHE_TTL = 3600       # durée de vie en secondes (1h)
 MAX_ATTACHMENT_FILE_SIZE = 8_000_000  # taille max par fichier (8 Mo) - on ignore les gros fichiers
+ATTACHMENT_CACHE_MAX_BYTES = 200_000_000  # plafond mémoire total du cache (200 Mo)
 
 # Délais d'attente (en secondes) pour la disponibilité des audit logs Discord.
 # Discord crée les entries audit log avec un léger décalage ; ces sleeps permettent
