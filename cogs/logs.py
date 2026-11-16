@@ -1838,8 +1838,10 @@ class Logs(commands.Cog):
         if before.name != after.name:
             changes.append((TEXTS["channel_prop_name"], f"`{before.name}` **-->** `{after.name}`"))
 
-        # Description / topic (texte, forum, stage — pas sur les catégories)
-        old_topic, new_topic = before.topic or "", after.topic or ""
+        # Description / topic (texte, forum, stage — ABSENT des vocaux et catégories :
+        # AttributeError si accès direct, qui tuerait tout le listener)
+        old_topic = getattr(before, 'topic', None) or ""
+        new_topic = getattr(after, 'topic', None) or ""
         if old_topic != new_topic:
             old_display = truncate_text(old_topic, 200) if old_topic else TEXTS["none"]
             new_display = truncate_text(new_topic, 200) if new_topic else TEXTS["none"]
@@ -1865,8 +1867,8 @@ class Logs(commands.Cog):
 
         # NSFW (texte uniquement)
         if getattr(before, 'nsfw', False) != getattr(after, 'nsfw', False):
-            old_nsfw = TEXTS["role_yes"] if before.nsfw else TEXTS["role_no"]
-            new_nsfw = TEXTS["role_yes"] if after.nsfw else TEXTS["role_no"]
+            old_nsfw = TEXTS["role_yes"] if getattr(before, 'nsfw', False) else TEXTS["role_no"]
+            new_nsfw = TEXTS["role_yes"] if getattr(after, 'nsfw', False) else TEXTS["role_no"]
             changes.append((TEXTS["channel_prop_nsfw"], f"`{old_nsfw}` **-->** `{new_nsfw}`"))
 
         # Débit audio (vocal uniquement)
