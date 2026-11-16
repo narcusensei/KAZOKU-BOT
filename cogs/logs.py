@@ -3,6 +3,7 @@
 
 import discord
 import aiohttp
+from types import SimpleNamespace
 from discord.ext import commands
 from datetime import datetime, timezone
 import json
@@ -224,6 +225,62 @@ class Logs(commands.Cog):
                 display_name=raw.get('global_name') or raw.get('username') or str(user_id)
             )
         return None
+
+    async def _fetch_audit_rest(self, guild, limit: int = 50) -> list:
+        """Récupère les dernières entries d'audit log via REST direct.
+
+        Même raison que _get_moderator_from_audit_log : le client HTTP interne
+        de discord.py peut bloquer indéfiniment sur ce bucket (cf. CLAUDE.md
+        « Pièges rencontrés ») — ne JAMAIS réintroduire `guild.audit_logs()`.
+
+        Retourne les entries brutes, de la plus récente à la plus ancienne :
+        {action_type, user, target_id, options_id, options_channel_id,
+         changes, age} — `age` en secondes, `user` résolu du cache si possible.
+        """
+        try:
+            session = self._get_audit_session()
+            async with session.get(
+                f'https://discord.com/api/v10/guilds/{guild.id}/audit-logs',
+                params={'limit': min(limit, 100)}
+            ) as resp:
+                if resp.status != 200:
+                    return []
+                data = await resp.json()
+        except (aiohttp.ClientError, asyncio.TimeoutError, Exception):
+            return []
+
+        users = {u['id']: u for u in data.get('users', [])}
+        now = datetime.now(timezone.utc).timestamp()
+        entries = []
+        for e in data.get('audit_log_entries', []):
+            user_id = e.get('user_id')
+            user = guild.get_member(int(user_id)) if user_id else None
+            if user is None and user_id:
+                user = self.bot.get_user(int(user_id))
+            if user is None and user_id:
+                raw = users.get(user_id, {})
+                user = SimpleNamespace(
+                    id=int(user_id),
+                    mention=f'<@{user_id}>',
+                    display_name=raw.get('global_name') or raw.get('username') or user_id,
+                    display_avatar=SimpleNamespace(url='')
+                )
+            try:
+                ts = ((int(e['id']) >> 22) + 1420070400000) / 1000
+                age = max(0.0, now - ts)
+            except (KeyError, ValueError, TypeError):
+                age = 1e9
+            options = e.get('options') or {}
+            entries.append({
+                'action_type': e.get('action_type'),
+                'user': user,
+                'target_id': e.get('target_id'),
+                'options_id': options.get('id'),
+                'options_channel_id': options.get('channel_id'),
+                'changes': e.get('changes') or [],
+                'age': age,
+            })
+        return entries
 
     def _get_mod_info(self, moderator):
         """Retourne (name, avatar_url, mention) d'un modérateur."""
@@ -544,22 +601,18 @@ class Logs(commands.Cog):
         reason_leave = TEXTS["member_leave_normal_reason"]
         moderator = None
 
-        try:
-            async for entry in member.guild.audit_logs(limit=50):
-                if entry.target and entry.target.id == member.id:
-                    time_diff = (datetime.now(timezone.utc) - entry.created_at).total_seconds()
-                    if time_diff < 60:
-                        action = entry.action.name.lower()
-                        if 'kick' in action:
-                            reason_leave = TEXTS["member_kick_reason"]
-                            moderator = entry.user
-                            break
-                        if 'ban' in action:
-                            reason_leave = TEXTS["member_ban_reason"]
-                            moderator = entry.user
-                            break
-        except (discord.Forbidden, discord.HTTPException):
-            pass
+        # REST direct (le client interne de discord.py bloque sur ce bucket)
+        for entry in await self._fetch_audit_rest(member.guild, limit=50):
+            if entry['target_id'] != str(member.id) or entry['age'] >= 60:
+                continue
+            if entry['action_type'] == discord.AuditLogAction.kick.value:
+                reason_leave = TEXTS["member_kick_reason"]
+                moderator = entry['user']
+                break
+            if entry['action_type'] == discord.AuditLogAction.ban.value:
+                reason_leave = TEXTS["member_ban_reason"]
+                moderator = entry['user']
+                break
 
         if reason_leave in [TEXTS["member_kick_reason"], TEXTS["member_ban_reason"]]:
             # Ignore si le bot est le modérateur (déjà loggé par le cog moderation)
@@ -1140,28 +1193,36 @@ class Logs(commands.Cog):
         fallback_types = {"notifications", "afk_channel", "system_channel"} - detected_types
         if fallback_types:
             await asyncio.sleep(AUDIT_LOG_DELAY_LONG)  # Attendre la création de l'entry audit log
-            try:
-                async for entry in after.audit_logs(limit=5, action=discord.AuditLogAction.guild_update):
-                    log_time = entry.created_at
-                    if (datetime.now(timezone.utc) - log_time).total_seconds() < 30:
-                        if "notifications" in fallback_types:
-                            before_notif = getattr(entry.before, 'default_notifications', None)
-                            after_notif = getattr(entry.after, 'default_notifications', None)
-                            if before_notif is not None and after_notif is not None and before_notif != after_notif:
-                                changes.append(("notifications", before_notif, after_notif))
-                        if "system_channel" in fallback_types:
-                            before_sys = getattr(entry.before, 'system_channel', None)
-                            after_sys = getattr(entry.after, 'system_channel', None)
-                            if before_sys != after_sys:
-                                changes.append(("system_channel", before_sys, after_sys))
-                        if "afk_channel" in fallback_types:
-                            before_afk = getattr(entry.before, 'afk_channel', None)
-                            after_afk = getattr(entry.after, 'afk_channel', None)
-                            if before_afk != after_afk:
-                                changes.append(("afk_channel_fallback", before_afk, after_afk))
-                        break
-            except Exception:
-                pass
+            # REST direct (le client interne de discord.py bloque sur ce bucket — cf. CLAUDE.md)
+            for entry in await self._fetch_audit_rest(after, limit=5):
+                if entry['action_type'] != discord.AuditLogAction.guild_update.value:
+                    continue
+                if entry['age'] < 30:
+                    raw_changes = {c.get('key'): c for c in entry['changes'] if c.get('key')}
+
+                    def _old(key):
+                        return (raw_changes.get(key) or {}).get('old_value')
+
+                    def _new(key):
+                        return (raw_changes.get(key) or {}).get('new_value')
+
+                    def _ch(val):
+                        # ID brut -> objet avec .mention pour le rendu (None = Aucune)
+                        return SimpleNamespace(mention=f"<#{val}>") if val else None
+
+                    if "notifications" in fallback_types:
+                        before_notif, after_notif = _old('default_notifications'), _new('default_notifications')
+                        if before_notif is not None and after_notif is not None and before_notif != after_notif:
+                            changes.append(("notifications", before_notif, after_notif))
+                    if "system_channel" in fallback_types:
+                        before_sys, after_sys = _old('system_channel_id'), _new('system_channel_id')
+                        if before_sys != after_sys:
+                            changes.append(("system_channel", before_sys, after_sys))
+                    if "afk_channel" in fallback_types:
+                        before_afk, after_afk = _old('afk_channel_id'), _new('afk_channel_id')
+                        if before_afk != after_afk:
+                            changes.append(("afk_channel_fallback", _ch(before_afk), _ch(after_afk)))
+                    break
 
         if not changes:
             return
@@ -1673,29 +1734,25 @@ class Logs(commands.Cog):
             return
 
         # Récupérer les entries audit log overwrite récentes pour identifier modérateur + cible.
+        # REST direct (le client interne de discord.py bloque sur ce bucket — cf. CLAUDE.md).
         await asyncio.sleep(AUDIT_LOG_DELAY_DEFAULT)
-        audit_entries = []  # [{action, user, extra, target_id}]
-        try:
-            async for entry in after.guild.audit_logs(limit=50):
-                if entry.action not in (
-                    discord.AuditLogAction.overwrite_create,
-                    discord.AuditLogAction.overwrite_update,
-                    discord.AuditLogAction.overwrite_delete
-                ):
-                    continue
-                if not (entry.target and getattr(entry.target, 'id', None) == after.id):
-                    continue
-                log_time = entry.created_at
-                if (datetime.now(timezone.utc) - log_time).total_seconds() < 120:
-                    extra_id = getattr(entry.extra, 'id', None) if entry.extra else None
-                    audit_entries.append({
-                        'action': entry.action,
-                        'user': entry.user,
-                        'extra_id': extra_id,
-                        'extra': entry.extra,
-                    })
-        except (discord.Forbidden, discord.HTTPException, AttributeError):
-            pass
+        overwrite_actions = (
+            discord.AuditLogAction.overwrite_create.value,
+            discord.AuditLogAction.overwrite_update.value,
+            discord.AuditLogAction.overwrite_delete.value,
+        )
+        audit_entries = []  # [{action, user, extra_id}]
+        for entry in await self._fetch_audit_rest(after.guild, limit=50):
+            if entry['action_type'] not in overwrite_actions:
+                continue
+            if entry['target_id'] != str(after.id):
+                continue
+            if entry['age'] < 120:
+                audit_entries.append({
+                    'action': entry['action_type'],
+                    'user': entry['user'],
+                    'extra_id': entry['options_id'],
+                })
 
         for action_key, target, old_ow, new_ow in changes:
             # Le target peut être un Role, un Member, un Object ou un int (id brute)
@@ -2161,17 +2218,17 @@ class Logs(commands.Cog):
 
         await asyncio.sleep(AUDIT_LOG_DELAY_DEFAULT)
 
-        # Chercher qui a supprimé l'invitation dans les audit logs
+        # Chercher qui a supprimé l'invitation dans les audit logs (REST direct)
         moderator = None
-        try:
-            async for entry in invite.guild.audit_logs(limit=50, action=discord.AuditLogAction.invite_delete):
-                if entry.target and hasattr(entry.target, 'code') and entry.target.code == invite.code:
-                    log_time = entry.created_at
-                    if (datetime.now(timezone.utc) - log_time).total_seconds() < 120:
-                        moderator = entry.user
-                        break
-        except (discord.Forbidden, discord.HTTPException):
-            pass
+        for entry in await self._fetch_audit_rest(invite.guild, limit=50):
+            if entry['action_type'] != discord.AuditLogAction.invite_delete.value:
+                continue
+            codes = [str(c.get('new_value')) for c in entry['changes'] if c.get('key') == 'code']
+            if invite.code not in codes:
+                continue
+            if entry['age'] < 120:
+                moderator = entry['user']
+                break
 
         mod_name, mod_avatar, mod_mention = self._get_mod_info(moderator)
         if not moderator:
@@ -2224,37 +2281,37 @@ class Logs(commands.Cog):
         await asyncio.sleep(AUDIT_LOG_DELAY_DEFAULT)
 
         # Chercher l'entry audit log webhook la plus récente sur ce channel
+        # (REST direct — le client interne de discord.py bloque sur ce bucket)
+        webhook_actions = {
+            discord.AuditLogAction.webhook_create.value,
+            discord.AuditLogAction.webhook_update.value,
+            discord.AuditLogAction.webhook_delete.value,
+        }
         webhook_entry = None
-        webhook_action = None
-        try:
-            async for entry in channel.guild.audit_logs(limit=30):
-                if entry.action not in (
-                    discord.AuditLogAction.webhook_create,
-                    discord.AuditLogAction.webhook_update,
-                    discord.AuditLogAction.webhook_delete
-                ):
-                    continue
-                # Filtrer par fraîcheur (< 120s)
-                if (datetime.now(timezone.utc) - entry.created_at).total_seconds() >= 120:
-                    continue
-                # Vérifier que l'entry concerne bien ce channel
-                target = entry.target
-                target_channel_id = getattr(target, 'channel_id', None)
-                if target_channel_id is not None and target_channel_id != channel.id:
-                    continue
-                webhook_entry = entry
-                webhook_action = entry.action
-                break
-        except (discord.Forbidden, discord.HTTPException, AttributeError):
-            pass
+        for entry in await self._fetch_audit_rest(channel.guild, limit=30):
+            if entry['action_type'] not in webhook_actions:
+                continue
+            # Filtrer par fraîcheur (< 120s)
+            if entry['age'] >= 120:
+                continue
+            # Vérifier que l'entry concerne bien ce channel
+            entry_channel = entry['options_channel_id']
+            if entry_channel is not None and entry_channel != str(channel.id):
+                continue
+            webhook_entry = entry
+            break
 
         if not webhook_entry:
             return
 
-        moderator = webhook_entry.user
+        webhook_action = discord.AuditLogAction(webhook_entry['action_type'])
+        moderator = webhook_entry['user']
         member = moderator or channel.guild.me
-        target = webhook_entry.target
-        webhook_name = getattr(target, 'name', None) or TEXTS["unknown"]
+
+        # Nom du webhook : depuis les changes (new_value à la création, old_value à la suppression)
+        changes_by_key = {c.get('key'): c for c in webhook_entry['changes'] if c.get('key')}
+        name_change = changes_by_key.get('name') or {}
+        webhook_name = name_change.get('new_value') or name_change.get('old_value') or TEXTS["unknown"]
 
         # Déterminer le type d'action
         if webhook_action == discord.AuditLogAction.webhook_create:
@@ -2270,14 +2327,12 @@ class Logs(commands.Cog):
             desc_template = TEXTS["webhook_deleted_desc"]
             log_type = "webhook_delete"
         else:  # webhook_update
-            before = webhook_entry.before
-            after = webhook_entry.after
-            # Discord ne peuple before/after qu'avec les attributs modifiés.
-            channel_changed = hasattr(after, 'channel')
-            name_changed = hasattr(after, 'name')
-            avatar_changed = hasattr(after, 'avatar')
-            old_avatar = getattr(before, 'avatar', None)
-            new_avatar = getattr(after, 'avatar', None)
+            # Discord ne peuple les changes qu'avec les attributs modifiés.
+            channel_changed = 'channel_id' in changes_by_key
+            name_changed = 'name' in changes_by_key
+            avatar_changed = 'avatar' in changes_by_key
+            old_avatar = (changes_by_key.get('avatar') or {}).get('old_value') if avatar_changed else None
+            new_avatar = (changes_by_key.get('avatar') or {}).get('new_value') if avatar_changed else None
 
             # Cas spécial : changement d'avatar uniquement (log dédié)
             if avatar_changed and not name_changed and not channel_changed:
@@ -2344,8 +2399,8 @@ class Logs(commands.Cog):
         elif webhook_action == discord.AuditLogAction.webhook_update:
             # Modification classique : afficher nom et channel si modifiés
             if name_changed:
-                old_name = getattr(before, 'name', None)
-                new_name = getattr(after, 'name', None)
+                old_name = (changes_by_key.get('name') or {}).get('old_value')
+                new_name = (changes_by_key.get('name') or {}).get('new_value')
                 embed.add_field(
                     name=TEXTS["webhook_name_field"],
                     value=f"`{old_name or TEXTS['none']}` **-->** `{new_name}`",
@@ -2353,10 +2408,10 @@ class Logs(commands.Cog):
                 )
 
             if channel_changed:
-                old_ch = getattr(before, 'channel', None)
-                new_ch = getattr(after, 'channel', None)
-                old_ch_display = old_ch.mention if old_ch else f"`{TEXTS['none']}`"
-                new_ch_display = new_ch.mention if new_ch else f"`{TEXTS['none']}`"
+                old_cid = (changes_by_key.get('channel_id') or {}).get('old_value')
+                new_cid = (changes_by_key.get('channel_id') or {}).get('new_value')
+                old_ch_display = f"<#{old_cid}>" if old_cid else f"`{TEXTS['none']}`"
+                new_ch_display = f"<#{new_cid}>" if new_cid else f"`{TEXTS['none']}`"
                 embed.add_field(
                     name=TEXTS["webhook_channel_field"],
                     value=f"{old_ch_display} **-->** {new_ch_display}",
@@ -2369,13 +2424,7 @@ class Logs(commands.Cog):
             embed.add_field(name=TEXTS["webhook_channel_field"], value=channel.mention, inline=False)
 
         embed.add_field(name=TEXTS["webhook_by_field"], value=member.mention, inline=False)
-
-        # Footer : utiliser l'ID du webhook si dispo, sinon l'ID du modérateur
-        webhook_id = getattr(target, 'id', None)
-        if webhook_id:
-            embed.set_footer(text=self._footer(log_type, member.id))
-        else:
-            embed.set_footer(text=self._footer(log_type, member.id))
+        embed.set_footer(text=self._footer(log_type, member.id))
 
         await log_channel.send(embed=embed)
 
@@ -2802,16 +2851,10 @@ class Logs(commands.Cog):
 
                 # 2. API: entry member_move la plus récente (< 120s)
                 # Discord cumule les moves: l'entry reste valide tant que le cumul continue
-                try:
-                    now = datetime.now(timezone.utc)
-                    async for entry in guild.audit_logs(limit=10, action=discord.AuditLogAction.member_move):
-                        entry_time = entry.created_at
-                        age = (now - entry_time).total_seconds()
-                        if age < 120:
-                            moderator = entry.user
-                            break
-                except Exception:
-                    pass
+                # (REST direct — cf. CLAUDE.md)
+                moderator = await self._get_moderator_from_audit_log(
+                    guild, None, [discord.AuditLogAction.member_move], time_window=120, limit=10
+                )
 
             if moderator:
                 break
@@ -2908,17 +2951,12 @@ class Logs(commands.Cog):
                                 del self.disconnect_cache[best_key]
                                 break
 
-                        # Fallback API si pas trouvé via le cache
+                        # Fallback API si pas trouvé via le cache (REST direct)
                         if not disconnected_by:
-                            try:
-                                async for entry in m.guild.audit_logs(limit=5, action=discord.AuditLogAction.member_disconnect):
-                                    entry_time = entry.created_at
-                                    age = (datetime.now(timezone.utc) - entry_time).total_seconds()
-                                    if age < 15:
-                                        disconnected_by = entry.user
-                                        break
-                            except Exception:
-                                pass
+                            disconnected_by = await self._get_moderator_from_audit_log(
+                                m.guild, None, [discord.AuditLogAction.member_disconnect],
+                                time_window=15, limit=5
+                            )
 
                         embed = self._create_voice_embed(m, "leave", voice_state=b, action_by=disconnected_by)
                         await lc.send(embed=embed)
@@ -3012,19 +3050,12 @@ class Logs(commands.Cog):
                     del self.server_mute_cache[best_key]
                     break
 
-            # Fallback API
+            # Fallback API (REST direct — cf. CLAUDE.md)
             if not moderator:
-                try:
-                    async for entry in member.guild.audit_logs(limit=10, action=discord.AuditLogAction.member_update):
-                        entry_time = entry.created_at
-                        age = (datetime.now(timezone.utc) - entry_time).total_seconds()
-                        if age > 15:
-                            break
-                        if entry.target and entry.target.id == member.id:
-                            moderator = entry.user
-                            break
-                except Exception:
-                    pass
+                moderator = await self._get_moderator_from_audit_log(
+                    member.guild, member.id, [discord.AuditLogAction.member_update],
+                    time_window=15, limit=10
+                )
 
             voice_channel = after.channel or before.channel
             if server_deaf_changed:
@@ -3173,18 +3204,17 @@ class Logs(commands.Cog):
             # 2. Fallback API : entry créée APRÈS event_time, du bon channel.
             # On attend un peu plus avant de requêter l'API car Discord met du temps
             # à créer l'entry ; les premiers tours reposent sur le cache temps réel.
-            try:
-                async for entry in guild.audit_logs(limit=10):
-                    if entry.action.value not in (192, 193):
-                        continue
-                    if getattr(entry, '_target_id', None) != channel_id:
-                        continue
-                    # N'accepter que l'entry de CETTE action (postérieure à event_time)
-                    if entry.created_at >= event_time and entry.user_id:
-                        mod_user_id = entry.user_id
-                        break
-            except Exception:
-                pass
+            # (REST direct — cf. CLAUDE.md)
+            max_age = (datetime.now(timezone.utc) - event_time).total_seconds()
+            for entry in await self._fetch_audit_rest(guild, limit=10):
+                if entry['action_type'] not in (192, 193):
+                    continue
+                if entry['target_id'] != str(channel_id):
+                    continue
+                # N'accepter que l'entry de CETTE action (postérieure à event_time)
+                if entry['age'] <= max_age and entry['user'] is not None:
+                    mod_user_id = entry['user'].id
+                    break
 
             if mod_user_id:
                 break
